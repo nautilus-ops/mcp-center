@@ -1,3 +1,5 @@
+pub const REGISTRY_TYPE: &str = "REGISTRY_TYPE";
+
 /// external api url
 pub const EXTERNAL_API: &str = "EXTERNAL_API";
 

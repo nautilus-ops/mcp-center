@@ -1,7 +1,6 @@
 use std::error::Error;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
-use crate::app::config;
 use crate::app::config::AppConfig;
 
 /// The Application trait defines the standard lifecycle for long-running services.

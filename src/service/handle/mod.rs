@@ -1,12 +1,18 @@
 use std::error::Error;
+use serde::Deserialize;
 
 pub mod external_api;
 pub mod self_manager;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Deserialize)]
 pub struct McpServer {
+    #[serde(rename = "transportType")]
     pub transport_type: String,
     pub endpoint: String,
+    pub name: String,
+    pub version: Option<String>,
+    #[serde(rename = "isPublished")]
+    pub is_published: Option<bool>,
 }
 
 #[async_trait::async_trait]

@@ -1,9 +1,9 @@
 use crate::service::handle::{ListHandler, McpServer};
-use async_trait::async_trait;
 use reqwest::Client;
+use serde::Deserialize;
 use std::error::Error;
 
-#[derive(Debug,Default)]
+#[derive(Debug, Default)]
 pub struct ExternalApiHandler {
     url: String,
     authorization: Option<String>,
@@ -27,7 +27,22 @@ impl ListHandler for ExternalApiHandler {
             builder = builder.header("Authorization", auth.as_str());
         }
         let response = builder.send().await?;
-        tracing::info!("ExternalApiHandler: {:?}", response.text().await?);
-        Ok(Vec::new())
+        let raw = response.text().await?;
+        // tracing::info!("ExternalApiHandler: {:?}", );
+
+        let res: ListResponse = serde_json::from_str(raw.as_str())?;
+        tracing::info!("list mcp number: {}", res.data.list.len());
+
+        Ok(res.data.list)
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListResponse {
+    pub data: ListData,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListData {
+    pub list: Vec<McpServer>,
 }

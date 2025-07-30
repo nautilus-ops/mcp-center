@@ -1279,6 +1279,8 @@ dependencies = [
  "pingora-proxy",
  "regex",
  "reqwest",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tracing",
