@@ -28,7 +28,6 @@ impl ListHandler for ExternalApiHandler {
         }
         let response = builder.send().await?;
         let raw = response.text().await?;
-        // tracing::info!("ExternalApiHandler: {:?}", );
 
         let res: ListResponse = serde_json::from_str(raw.as_str())?;
         tracing::info!("list mcp number: {}", res.data.list.len());

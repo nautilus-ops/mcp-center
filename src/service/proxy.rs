@@ -8,10 +8,10 @@ use crate::service::handle::self_manager::SelfManagerHandler;
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::{StatusCode, Uri};
-use pingora_core::ErrorType;
 use pingora_core::prelude::{HttpPeer, Server};
 use pingora_core::protocols::http::ServerSession as HttpSession;
 use pingora_core::server::{RunArgs, ShutdownSignal, ShutdownSignalWatch};
+use pingora_core::{ErrorType, InternalError};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_load_balancing::prelude::RoundRobin;
 use pingora_load_balancing::{Backend, LoadBalancer};
@@ -197,8 +197,17 @@ impl ProxyService {
                 let mut mcps = cache.write().await;
 
                 mcp_servers.iter().for_each(|server| {
+                    let mut tag = match &server.version {
+                        None => "default".to_string(),
+                        Some(version) => version.clone(),
+                    };
+
+                    if let Some(t) = &server.tag {
+                        tag = t.clone();
+                    }
+
                     let mut item = HashMap::<String, McpServerInfo>::new();
-                    let (_, host, port, _) = match parse_endpoint(server.endpoint.as_str()) {
+                    let result = match parse_endpoint(server.endpoint.as_str()) {
                         Ok(result) => result,
                         Err(err) => {
                             tracing::error!(
@@ -210,7 +219,7 @@ impl ProxyService {
                         }
                     };
 
-                    let ep = format!("{}:{}", host, port);
+                    let ep = format!("{}:{}", result.host, result.port);
 
                     // set this tag
                     let upstream = match LoadBalancer::try_from_iter([ep.clone()]) {
@@ -223,11 +232,6 @@ impl ProxyService {
                             );
                             return;
                         }
-                    };
-
-                    let tag = match &server.version {
-                        None => "default".to_string(),
-                        Some(version) => version.clone(),
                     };
 
                     item.insert(
@@ -264,6 +268,131 @@ impl ProxyService {
         }
         None
     }
+
+    pub(crate) async fn build_context_from_header(
+        &self,
+        session: &mut Session,
+        ctx: &mut ProxyContext,
+    ) -> pingora_core::Result<()> {
+        let name = match session.req_header().headers.get("Proxy-Mcp-Name") {
+            None => {
+                tracing::error!("Can't find Proxy-Mcp-Name header");
+                return Err(pingora_core::Error::explain(
+                    InternalError,
+                    "Can't get Proxy-Mcp-Name from headers.",
+                ));
+            }
+            Some(value) => value.to_str().map_err(|_| {
+                tracing::error!("Can't parse Proxy-Mcp-Name from header.");
+                pingora_core::Error::explain(
+                    InternalError,
+                    "Can't parse Proxy-Mcp-Name from headers.",
+                )
+            })?,
+        };
+
+        let version = match session.req_header().headers.get("Proxy-Mcp-Version") {
+            None => {
+                tracing::error!("Can't get Proxy-Mcp-Version from headers.");
+                return Err(pingora_core::Error::explain(
+                    InternalError,
+                    "Can't get Proxy-Mcp-Version from headers.",
+                ));
+            }
+            Some(value) => value.to_str().map_err(|_| {
+                tracing::error!("Can't parse Proxy-Mcp-Version from headers.");
+                pingora_core::Error::explain(
+                    InternalError,
+                    "Can't parse Proxy-Mcp-Version from headers.",
+                )
+            })?,
+        };
+
+        let (backend, parsed) = self.load_mcp_info_from_cache(name, version).await?;
+        ctx.endpoint = parsed.endpoint.clone();
+        ctx.path = parsed.path.clone();
+        ctx.host = parsed.host.clone();
+        ctx.scheme = parsed.scheme.clone();
+        ctx.port = parsed.port.clone();
+        ctx.backend = Some(backend);
+        Ok(())
+    }
+
+    pub(crate) async fn build_context_from_uri(
+        &self,
+        session: &mut Session,
+        ctx: &mut ProxyContext,
+    ) -> pingora_core::Result<()> {
+        let (mcp_name, tag) = match ctx
+            .regex
+            .captures(session.req_header().uri.to_string().as_str())
+        {
+            None => {
+                tracing::error!("Can't parse uri {}", session.req_header().uri);
+                return Err(pingora_core::Error::new(InternalError));
+            }
+            Some(caps) => (caps[1].to_string(), caps[2].to_string()),
+        };
+
+        let (backend, parsed) = self
+            .load_mcp_info_from_cache(mcp_name.as_str(), tag.as_str())
+            .await?;
+        ctx.endpoint = parsed.endpoint.clone();
+        ctx.path = parsed.path.clone();
+        ctx.host = parsed.host.clone();
+        ctx.scheme = parsed.scheme.clone();
+        ctx.port = parsed.port.clone();
+        ctx.backend = Some(backend);
+
+        Ok(())
+    }
+
+    async fn load_mcp_info_from_cache(
+        &self,
+        mcp_name: &str,
+        tag: &str,
+    ) -> pingora_core::Result<(Backend, ParsedEndpoint)> {
+        let (backend, endpoint) = match self.load_server_info(mcp_name, tag).await {
+            Some(info) => info,
+            None => {
+                tracing::error!("Can't load server {}, tag {}", mcp_name, tag);
+                return Err(pingora_core::Error::explain(
+                    ErrorType::HTTPStatus(404),
+                    format!("Can't load server {}, tag {}", mcp_name, tag),
+                ));
+            }
+        };
+
+        let parsed = match parse_endpoint(endpoint.as_str()) {
+            Ok(result) => result,
+            Err(err) => {
+                tracing::error!("Can't parse endpoint {}, error: {}", endpoint, err);
+                return Err(pingora_core::Error::explain(
+                    InternalError,
+                    format!("Can't parse endpoint {}, error: {}", endpoint, err),
+                ));
+            }
+        };
+        Ok((backend, parsed))
+    }
+
+    // generate an error response and return
+    async fn return_error_response(
+        &self,
+        session: &mut Session,
+        status_code: u16,
+        content: Bytes,
+    ) -> pingora_core::Result<()> {
+        let mut response_header = HttpSession::generate_error(status_code);
+
+        response_header.insert_header("Server", "MCP-Proxy")?;
+        response_header.set_content_length(content.len())?;
+
+        session
+            .write_error_response(response_header, Bytes::from(content))
+            .await?;
+        Ok(())
+    }
 }
 #[async_trait]
 impl ProxyHttp for ProxyService {
@@ -275,56 +404,24 @@ impl ProxyHttp for ProxyService {
 
     async fn upstream_peer(
         &self,
-        session: &mut Session,
+        _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora_core::Result<Box<HttpPeer>> {
-        let (mcp_name, tag) = match ctx
-            .regex
-            .captures(session.req_header().uri.to_string().as_str())
-        {
-            None => {
-                tracing::error!("Can't parse uri {}", session.req_header().uri);
-                return Err(pingora_core::Error::new(ErrorType::InternalError));
-            }
-            Some(caps) => (caps[1].to_string(), caps[2].to_string()),
-        };
-
-        let info = match self.load_server_info(mcp_name.as_str(), tag.as_str()).await {
-            Some(info) => info,
-            None => {
-                tracing::error!("Can't load server {}, tag {}", mcp_name, tag);
-                return Err(pingora_core::Error::new(ErrorType::InternalError));
-            }
-        };
-
-        let (scheme, host, port, path) = match parse_endpoint(info.1.as_str()) {
-            Ok(result) => result,
-            Err(err) => {
-                tracing::error!("Can't parse endpoint {}, error: {}", info.1, err);
-                return Err(pingora_core::Error::new(ErrorType::InternalError));
-            }
-        };
-
-        ctx.endpoint = info.1.clone();
-        ctx.scheme = scheme.clone();
-        ctx.host = host.clone();
-        ctx.path = path.clone();
-        ctx.port = port.clone();
-
-        let mut proxy = HttpPeer::new(info.0.clone(), false, String::from(""));
-
-        if scheme == "https" {
-            proxy = HttpPeer::new(info.0.clone(), true, host.clone());
-
-            session
-                .req_header_mut()
-                .insert_header("Upstream-Host", host.clone())?;
+        if ctx.backend.is_none() {
+            tracing::error!("Can't get backend for upstream peer");
+            return Err(pingora_core::Error::explain(
+                InternalError,
+                "upstream backend not set",
+            ));
         }
 
-        session
-            .req_header_mut()
-            .insert_header("Upstream-Path", path.clone())?;
+        let backend = ctx.backend.as_ref().unwrap();
 
+        let mut proxy = HttpPeer::new(backend.clone(), false, String::from(""));
+
+        if ctx.scheme == "https" {
+            proxy = HttpPeer::new(backend.clone(), true, ctx.host.clone());
+        }
         Ok(Box::from(proxy))
     }
 
@@ -337,6 +434,7 @@ impl ProxyHttp for ProxyService {
         Self::CTX: Send + Sync,
     {
         if session.req_header().uri == "/" {
+            self.build_context_from_header(session, ctx).await?;
             return Ok(false);
         }
 
@@ -346,33 +444,31 @@ impl ProxyHttp for ProxyService {
         {
             let transport_type = &caps[3];
             if transport_type == "sse" || transport_type == "streamable" {
+                self.build_context_from_uri(session, ctx).await?;
                 return Ok(false);
             }
 
             let content = String::from("not supported transport type");
-            let mut response_header =
-                HttpSession::generate_error(StatusCode::INTERNAL_SERVER_ERROR.as_u16());
 
-            response_header.insert_header("Server", "MCP-Proxy")?;
-            response_header.set_content_length(content.len())?;
-
-            session
-                .write_error_response(response_header, Bytes::from(content))
-                .await?;
+            self.return_error_response(
+                session,
+                StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                Bytes::from(content),
+            )
+            .await?;
 
             tracing::error!("not supported transport type: {}", transport_type);
             return Ok(true);
         }
 
         let content = String::from("Invalid URI");
-        let mut response_header = HttpSession::generate_error(StatusCode::NOT_FOUND.as_u16());
 
-        response_header.insert_header("Server", "MCP-Proxy")?;
-        response_header.set_content_length(content.len())?;
-
-        session
-            .write_error_response(response_header, Bytes::from(content))
-            .await?;
+        self.return_error_response(
+            session,
+            StatusCode::NOT_FOUND.as_u16(),
+            Bytes::from(content),
+        )
+        .await?;
 
         tracing::error!("Invalid URI : {}", session.req_header().uri);
         Ok(true)
@@ -416,6 +512,7 @@ struct ProxyContext {
     host: String,
     port: String,
     path: String,
+    backend: Option<Backend>,
 }
 
 impl ProxyContext {
@@ -427,6 +524,7 @@ impl ProxyContext {
             host: String::from(""),
             port: String::from(""),
             path: String::from(""),
+            backend: None,
         }
     }
 }
@@ -448,7 +546,15 @@ fn build_external_api_registry() -> Result<Registry, Box<dyn Error>> {
     Ok(Registry::ExternalAPI(config))
 }
 
-fn parse_endpoint(endpoint: &str) -> Result<(String, String, String, String), Box<dyn Error>> {
+struct ParsedEndpoint {
+    endpoint: String,
+    host: String,
+    port: String,
+    path: String,
+    scheme: String,
+}
+
+fn parse_endpoint(endpoint: &str) -> Result<ParsedEndpoint, Box<dyn Error>> {
     let re =
         Regex::new(r"^(?P<scheme>https?)://(?P<host>[^/:]+)(?::(?P<port>\d+))?(?P<path>/.*)?$")
             .unwrap();
@@ -467,12 +573,13 @@ fn parse_endpoint(endpoint: &str) -> Result<(String, String, String, String), Bo
             },
         };
         let path = caps.name("path").map(|m| m.as_str()).unwrap_or("/");
-        Ok((
-            String::from(scheme),
-            String::from(host),
-            String::from(port),
-            String::from(path),
-        ))
+        Ok(ParsedEndpoint {
+            endpoint: endpoint.to_string(),
+            host: host.to_string(),
+            port: port.to_string(),
+            path: path.to_string(),
+            scheme: scheme.to_string(),
+        })
     } else {
         Err(format!("Failed to parse endpoint {}", endpoint).into())
     }

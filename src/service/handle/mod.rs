@@ -1,5 +1,5 @@
-use std::error::Error;
 use serde::Deserialize;
+use std::error::Error;
 
 pub mod external_api;
 pub mod self_manager;
@@ -11,6 +11,7 @@ pub struct McpServer {
     pub endpoint: String,
     pub name: String,
     pub version: Option<String>,
+    pub tag: Option<String>,
     #[serde(rename = "isPublished")]
     pub is_published: Option<bool>,
 }
