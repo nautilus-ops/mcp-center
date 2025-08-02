@@ -1,5 +1,5 @@
 use crate::app::application::Application;
-use crate::app::config::AppConfig;
+use crate::app::config::McpCenter;
 use crate::envs;
 use crate::envs::REGISTRY_TYPE;
 use crate::service::handle::ListHandler;
@@ -111,7 +111,7 @@ impl MainServer {
 }
 
 impl Application for MainServer {
-    fn prepare(&mut self, config: AppConfig) -> Result<(), Box<dyn Error>> {
+    fn prepare(&mut self, config: McpCenter) -> Result<(), Box<dyn Error>> {
         self.bootstrap.port = config.port;
 
         let registry = env::var(REGISTRY_TYPE);
@@ -163,6 +163,7 @@ struct ProxyService {
     runtime: Arc<Runtime>,
     // mcp-name -> tag(version) -> load-balancer
     cache: Arc<RwLock<HashMap<String, HashMap<String, McpServerInfo>>>>,
+    
 }
 
 impl ProxyService {
@@ -250,6 +251,23 @@ impl ProxyService {
                         ep
                     );
                 });
+
+
+                let upstream = match LoadBalancer::try_from_iter(["127.0.0.1:3000"]) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        tracing::error!(
+                                "Can't create load balancer endpoint: {}, error: {}",
+                                "127.0.0.1:3000",
+                                err
+                            );
+                        return;
+                    }
+                };
+
+                let mut tmp = HashMap::new();
+                tmp.insert("default".to_owned(), McpServerInfo{ lb: upstream, endpoint: "http://127.0.0.1:3000/mcp".to_string() });
+                mcps.insert("local".to_string(), tmp);
 
                 tracing::info!("Mcp servers: {:?}", mcps.len());
             }
@@ -503,6 +521,25 @@ impl ProxyHttp for ProxyService {
         tracing::info!("response_filter {:?}", upstream_response);
         Ok(())
     }
+
+    fn upstream_response_body_filter(&self, session: &mut Session, body: &mut Option<Bytes>, _end_of_stream: bool, _ctx: &mut Self::CTX) -> pingora_core::Result<()> {
+        let path = session.req_header().uri.path();
+        if path.ends_with("/sse") {
+            if let Some(body) = body.clone() {
+                let text = String::from_utf8_lossy(body.as_ref());
+
+                let re = Regex::new(r"sessionId=([a-f0-9-]+)").unwrap();
+
+                if let Some(caps) = re.captures(&text) {
+                    let session_id = caps.get(1).map(|m| m.as_str()).unwrap();
+                    println!("sessionId: {}", session_id);
+                } else {
+                    println!("No sessionId found");
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 struct ProxyContext {
@@ -518,7 +555,7 @@ struct ProxyContext {
 impl ProxyContext {
     pub fn new() -> Self {
         Self {
-            regex: Regex::new(r"^/connect/([^/]+)/([^/]+)/([^/]+)$").unwrap(),
+            regex: Regex::new(r"^/connect/([^/]+)/([^/]+)/([^/]+)(/.*)?$").unwrap(),
             scheme: String::from("https"),
             endpoint: String::from(""),
             host: String::from(""),

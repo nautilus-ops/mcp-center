@@ -1,5 +1,5 @@
 use crate::app::application::Application;
-use crate::app::config::AppConfig;
+use crate::app::config::McpCenter;
 use clap::{Parser, Subcommand};
 use std::error::Error;
 use std::process::exit;
@@ -35,7 +35,7 @@ impl Booter {
         // Parse command line arguments using clap
         let cli = Cli::parse();
 
-        let mut config: AppConfig = AppConfig { port: 0 };
+        let mut config: McpCenter = McpCenter { port: 0 };
 
         // Determine the configuration file path based on CLI arguments
         match &cli.command {

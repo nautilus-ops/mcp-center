@@ -10,6 +10,7 @@ mod app;
 mod booter;
 mod service;
 mod envs;
+mod common;
 
 fn main() -> Result<(), Box<dyn Error>> {
     registry()

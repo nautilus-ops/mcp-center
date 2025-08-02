@@ -1,0 +1,4 @@
+[mcp-center]
+http_port = "${HTTP_PORT:5432}"
+grpc_port = "${GRPC_PORT:5433}"
+

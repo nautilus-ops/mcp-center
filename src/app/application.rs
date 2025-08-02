@@ -1,7 +1,7 @@
 use std::error::Error;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
-use crate::app::config::AppConfig;
+use crate::app::config::McpCenter;
 
 /// The Application trait defines the standard lifecycle for long-running services.
 ///
@@ -25,7 +25,7 @@ use crate::app::config::AppConfig;
 /// Implementations must be `Send + Sync` to support multi-threaded async runtimes.
 ///
 pub trait Application: Send + Sync {
-    fn prepare(&mut self, config: AppConfig) -> Result<(), Box<dyn Error>>;
+    fn prepare(&mut self, config: McpCenter) -> Result<(), Box<dyn Error>>;
 
     /// Runs the main application loop until shutdown is requested.
     ///
