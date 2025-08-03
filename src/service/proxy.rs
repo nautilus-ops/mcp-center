@@ -23,10 +23,13 @@ use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use std::fs;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
+use crate::app::config;
+use crate::common::utils;
 
 const REGISTRY_TYPE_SELF_MANAGEMENT: &str = "self";
 const REGISTRY_TYPE_NACOS: &str = "nacos";
@@ -111,7 +114,22 @@ impl MainServer {
 }
 
 impl Application for MainServer {
-    fn prepare(&mut self, config: McpCenter) -> Result<(), Box<dyn Error>> {
+    fn prepare(&mut self, path: String) -> Result<(), Box<dyn Error>> {
+        tracing::info!("Preparing Censor application with config: {}", path);
+
+        let mut content = fs::read_to_string(path.clone()).map_err(|e| {
+            tracing::error!("Failed to read config file {}: {}", path, e);
+            e
+        })?;
+
+        content = utils::replace_env_variables(content);
+
+        let config: config::McpCenter = toml::from_str(&content).map_err(|e| {
+            tracing::error!("Failed to parse TOML config: {}", e);
+            e
+        })?;
+
+
         self.bootstrap.port = config.port;
 
         let registry = env::var(REGISTRY_TYPE);

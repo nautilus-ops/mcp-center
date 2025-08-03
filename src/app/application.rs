@@ -25,7 +25,7 @@ use crate::app::config::McpCenter;
 /// Implementations must be `Send + Sync` to support multi-threaded async runtimes.
 ///
 pub trait Application: Send + Sync {
-    fn prepare(&mut self, config: McpCenter) -> Result<(), Box<dyn Error>>;
+    fn prepare(&mut self, config: String) -> Result<(), Box<dyn Error>>;
 
     /// Runs the main application loop until shutdown is requested.
     ///
