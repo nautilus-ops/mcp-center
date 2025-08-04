@@ -1,4 +1,4 @@
-use crate::service::handle::{ListHandler, McpServer};
+use crate::service::register::{ListHandler, McpServer};
 use reqwest::Client;
 use serde::Deserialize;
 use std::error::Error;

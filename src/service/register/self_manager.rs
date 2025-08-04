@@ -1,5 +1,5 @@
 use std::error::Error;
-use crate::service::handle::{ListHandler, McpServer};
+use crate::service::register::{ListHandler, McpServer};
 
 #[derive(Debug,Default)]
 pub struct SelfManagerHandler {
