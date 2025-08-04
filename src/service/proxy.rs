@@ -1,10 +1,15 @@
 use crate::app::application::Application;
+use crate::app::config;
 use crate::app::config::McpCenter;
+use crate::common::utils;
 use crate::envs;
 use crate::envs::REGISTRY_TYPE;
 use crate::service::register::ListHandler;
 use crate::service::register::external_api::ExternalApiHandler;
 use crate::service::register::self_manager::SelfManagerHandler;
+use crate::service::session;
+use crate::service::session::SessionInfo;
+use crate::service::session::manager::LocalManager;
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::{StatusCode, Uri};
@@ -20,16 +25,14 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
+use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::fs;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
-use crate::app::config;
-use crate::common::utils;
 
 const REGISTRY_TYPE_SELF_MANAGEMENT: &str = "self";
 const REGISTRY_TYPE_NACOS: &str = "nacos";
@@ -129,7 +132,6 @@ impl Application for MainServer {
             e
         })?;
 
-
         self.bootstrap.port = config.port;
 
         let registry = env::var(REGISTRY_TYPE);
@@ -179,9 +181,10 @@ struct McpServerInfo {
 struct ProxyService {
     handle: Arc<Box<dyn ListHandler>>,
     runtime: Arc<Runtime>,
+
     // mcp-name -> tag(version) -> load-balancer
     cache: Arc<RwLock<HashMap<String, HashMap<String, McpServerInfo>>>>,
-    
+    session_manager: Arc<Box<dyn session::Manager>>,
 }
 
 impl ProxyService {
@@ -190,11 +193,17 @@ impl ProxyService {
             handle: Arc::new(handle),
             runtime,
             cache: Arc::new(RwLock::new(HashMap::new())),
+            session_manager: Arc::new(Box::new(LocalManager::new())),
         };
 
         service.async_cache();
 
         service
+    }
+
+    #[allow(dead_code)]
+    pub fn with_session_manager(&mut self, manager: Box<dyn session::Manager>) {
+        self.session_manager = Arc::new(manager)
     }
 
     pub fn async_cache(&self) {
@@ -270,21 +279,26 @@ impl ProxyService {
                     );
                 });
 
-
                 let upstream = match LoadBalancer::try_from_iter(["127.0.0.1:3000"]) {
                     Ok(result) => result,
                     Err(err) => {
                         tracing::error!(
-                                "Can't create load balancer endpoint: {}, error: {}",
-                                "127.0.0.1:3000",
-                                err
-                            );
+                            "Can't create load balancer endpoint: {}, error: {}",
+                            "127.0.0.1:3000",
+                            err
+                        );
                         return;
                     }
                 };
 
                 let mut tmp = HashMap::new();
-                tmp.insert("default".to_owned(), McpServerInfo{ lb: upstream, endpoint: "http://127.0.0.1:3000/mcp".to_string() });
+                tmp.insert(
+                    "default".to_owned(),
+                    McpServerInfo {
+                        lb: upstream,
+                        endpoint: "http://127.0.0.1:3000/mcp".to_string(),
+                    },
+                );
                 mcps.insert("local".to_string(), tmp);
 
                 tracing::info!("Mcp servers: {:?}", mcps.len());
@@ -351,6 +365,8 @@ impl ProxyService {
         ctx.scheme = parsed.scheme.clone();
         ctx.port = parsed.port.clone();
         ctx.backend = Some(backend);
+        ctx.name = name.to_string();
+        ctx.tag = version.to_string();
         Ok(())
     }
 
@@ -540,7 +556,13 @@ impl ProxyHttp for ProxyService {
         Ok(())
     }
 
-    fn upstream_response_body_filter(&self, session: &mut Session, body: &mut Option<Bytes>, _end_of_stream: bool, _ctx: &mut Self::CTX) -> pingora_core::Result<()> {
+    fn upstream_response_body_filter(
+        &self,
+        session: &mut Session,
+        body: &mut Option<Bytes>,
+        _end_of_stream: bool,
+        ctx: &mut Self::CTX,
+    ) -> pingora_core::Result<()> {
         let path = session.req_header().uri.path();
         if path.ends_with("/sse") {
             if let Some(body) = body.clone() {
@@ -550,7 +572,22 @@ impl ProxyHttp for ProxyService {
 
                 if let Some(caps) = re.captures(&text) {
                     let session_id = caps.get(1).map(|m| m.as_str()).unwrap();
-                    println!("sessionId: {}", session_id);
+                    tracing::info!(
+                        "connect mcp success sessionId={}, name={}, tag={}",
+                        session_id,
+                        ctx.name,
+                        ctx.tag
+                    );
+
+                    let manager = self.session_manager.clone();
+                    let name = ctx.name.clone();
+                    let tag = ctx.tag.clone();
+                    let sid = session_id.to_string().clone();
+
+                    // waiting session info save
+                    self.runtime.block_on(async move {
+                        manager.save(&sid, SessionInfo { name, tag }).await.unwrap()
+                    });
                 } else {
                     println!("No sessionId found");
                 }
@@ -568,6 +605,8 @@ struct ProxyContext {
     port: String,
     path: String,
     backend: Option<Backend>,
+    name: String,
+    tag: String,
 }
 
 impl ProxyContext {
@@ -580,6 +619,8 @@ impl ProxyContext {
             port: String::from(""),
             path: String::from(""),
             backend: None,
+            name: String::from(""),
+            tag: String::from(""),
         }
     }
 }
