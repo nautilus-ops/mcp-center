@@ -30,9 +30,25 @@ impl ListHandler for ExternalApiHandler {
         let raw = response.text().await?;
 
         let res: ListResponse = serde_json::from_str(raw.as_str())?;
-        tracing::info!("list mcp number: {}", res.data.list.len());
 
-        Ok(res.data.list)
+        tracing::info!("all mcp number: {}", res.data.list.len());
+
+        let mut servers = vec![];
+        let mut remove_count = 0;
+        res.data.list.iter().for_each(|server| {
+            if server.is_published.is_none() || server.is_published == Some(true) {
+                servers.push(server.clone());
+                return;
+            }
+            remove_count += 1;
+        });
+
+        tracing::info!(
+            "{} mcp servers will be proxy",
+            res.data.list.len() - remove_count
+        );
+
+        Ok(servers)
     }
 }
 

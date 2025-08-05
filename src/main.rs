@@ -1,15 +1,14 @@
 use std::env;
 use std::error::Error;
 use crate::booter::Booter;
-use crate::service::proxy::MainServer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry;
 use tracing_subscriber::util::SubscriberInitExt;
+use crate::service::server::MainServer;
 
 mod app;
 mod booter;
 mod service;
-mod envs;
 mod common;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -20,15 +19,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
-    
-    // match &self.bootstrap.registry {
-    //     Registry::SelfManagement => SelfManagerHandler::new(),
-    //     Registry::Nacos(_) => SelfManagerHandler::new(),
-    //     Registry::Redis(_) => SelfManagerHandler::new(),
-    //     Registry::ExternalAPI(config) => {
-    //         
-    //     }
-    // };
     
 
     if let Err(err) = Booter::run(MainServer::new()) {

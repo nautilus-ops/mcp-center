@@ -1,9 +1,7 @@
 use crate::app::application::Application;
-use crate::app::config::McpCenter;
 use clap::{Parser, Subcommand};
 use std::error::Error;
 use std::path::PathBuf;
-use std::process::exit;
 use tokio::runtime::Builder;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio_util::sync::CancellationToken;

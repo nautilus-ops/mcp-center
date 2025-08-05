@@ -4,10 +4,8 @@ use std::error::Error;
 pub mod external_api;
 pub mod self_manager;
 
-#[derive(Default, Debug, Deserialize)]
+#[derive(Default, Debug, Deserialize, Clone)]
 pub struct McpServer {
-    #[serde(rename = "transportType")]
-    pub transport_type: String,
     pub endpoint: String,
     pub name: String,
     pub version: Option<String>,

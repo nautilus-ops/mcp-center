@@ -1,10 +1,9 @@
+use std::io::Write;
 use crate::service::session::{Manager, SessionInfo};
-use async_trait::async_trait;
 use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
-use tokio::fs::OpenOptions;
-use tokio::io::AsyncWriteExt;
+use std::fs::OpenOptions;
 
 const SESSION_DIR_PATH: &str = "sessions";
 
@@ -23,12 +22,12 @@ impl Default for LocalManager {
         Self::new()
     }
 }
-#[async_trait]
+
 impl Manager for LocalManager {
-    async fn load(&self, session_id: &str) -> Result<SessionInfo, Box<dyn Error>> {
+    fn load(&self, session_id: &str) -> Result<SessionInfo, Box<dyn Error>> {
         let dir_path = build_path(session_id);
 
-        let content = tokio::fs::read_to_string(dir_path).await?;
+        let content = fs::read_to_string(dir_path)?;
         let split = content.split(" ").collect::<Vec<&str>>();
         if split.len() != 2 {
             return Err("[LocalManager] Invalid input".into());
@@ -39,16 +38,14 @@ impl Manager for LocalManager {
         })
     }
 
-    async fn save(&self, session_id: &str, info: SessionInfo) -> Result<(), Box<dyn Error>> {
+    fn save(&self, session_id: &str, info: SessionInfo) -> Result<(), Box<dyn Error>> {
         let dir_path = build_path(session_id);
 
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(dir_path)
-            .await?;
-        file.write_all(format!("{} {}", info.name, info.tag).as_bytes())
-            .await?;
+            .open(dir_path)?;
+        file.write_all(format!("{} {}", info.name, info.tag).as_bytes())?;
         Ok(())
     }
 }

@@ -1,21 +1,12 @@
-use crate::app::application::Application;
-use crate::app::config;
-use crate::app::config::McpCenter;
-use crate::common::utils;
-use crate::envs;
-use crate::envs::REGISTRY_TYPE;
 use crate::service::register::ListHandler;
-use crate::service::register::external_api::ExternalApiHandler;
-use crate::service::register::self_manager::SelfManagerHandler;
 use crate::service::session;
 use crate::service::session::SessionInfo;
 use crate::service::session::manager::LocalManager;
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::{StatusCode, Uri};
-use pingora_core::prelude::{HttpPeer, Server};
+use pingora_core::prelude::{HttpPeer};
 use pingora_core::protocols::http::ServerSession as HttpSession;
-use pingora_core::server::{RunArgs, ShutdownSignal, ShutdownSignalWatch};
 use pingora_core::{ErrorType, InternalError};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_load_balancing::prelude::RoundRobin;
@@ -23,162 +14,20 @@ use pingora_load_balancing::{Backend, LoadBalancer};
 use pingora_proxy::{ProxyHttp, Session};
 use regex::Regex;
 use std::collections::HashMap;
-use std::env;
 use std::error::Error;
-use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::interval;
-use tokio_util::sync::CancellationToken;
-
-const REGISTRY_TYPE_SELF_MANAGEMENT: &str = "self";
-const REGISTRY_TYPE_NACOS: &str = "nacos";
-const REGISTRY_TYPE_REDIS: &str = "redis";
-const REGISTRY_TYPE_EXTERNAL_API: &str = "external";
-
-#[derive(Default)]
-pub enum Registry {
-    #[default]
-    SelfManagement,
-    Nacos(NacosConfig),
-    Redis(RedisConfig),
-    ExternalAPI(ExternalApiConfig),
-}
-
-// TODO support get mcp server from nacos
-pub struct NacosConfig {}
-
-// TODO support get mcp server from redis
-pub struct RedisConfig {}
-
-pub struct ExternalApiConfig {
-    pub url: String,
-    pub authorization: Option<String>,
-}
-
-#[derive(Default)]
-struct Bootstrap {
-    pub port: u16,
-    pub registry: Registry,
-}
-
-pub struct MainServer {
-    bootstrap: Bootstrap,
-}
-
-impl MainServer {
-    pub fn new() -> Self {
-        Self {
-            bootstrap: Default::default(),
-        }
-    }
-
-    fn start(
-        &self,
-        shutdown_signal: Box<dyn ShutdownSignalWatch>,
-        rt: Runtime,
-    ) -> Result<(), Box<dyn Error>> {
-        let mut server = Server::new(None).unwrap();
-
-        server.bootstrap();
-
-        let handler: Box<dyn ListHandler> = match &self.bootstrap.registry {
-            Registry::SelfManagement => Box::new(SelfManagerHandler::new()),
-            // TODO: support nacos
-            Registry::Nacos(_) => Box::new(SelfManagerHandler::new()),
-            // TODO: support redis
-            Registry::Redis(_) => Box::new(SelfManagerHandler::new()),
-            Registry::ExternalAPI(config) => Box::new(ExternalApiHandler::new(
-                config.url.as_str(),
-                config.authorization.clone(),
-            )),
-        };
-
-        let runtime = Arc::new(rt);
-
-        let mut service = pingora_proxy::http_proxy_service_with_name(
-            &server.configuration,
-            ProxyService::new(handler, runtime.clone()),
-            "McpGateway",
-        );
-
-        tracing::info!("starting HTTP server on port {}", self.bootstrap.port);
-        service.add_tcp(format!("0.0.0.0:{}", self.bootstrap.port).as_str());
-
-        server.add_service(service);
-
-        server.run(RunArgs { shutdown_signal });
-
-        Ok(())
-    }
-}
-
-impl Application for MainServer {
-    fn prepare(&mut self, path: String) -> Result<(), Box<dyn Error>> {
-        tracing::info!("Preparing Censor application with config: {}", path);
-
-        let mut content = fs::read_to_string(path.clone()).map_err(|e| {
-            tracing::error!("Failed to read config file {}: {}", path, e);
-            e
-        })?;
-
-        content = utils::replace_env_variables(content);
-
-        let config: config::McpCenter = toml::from_str(&content).map_err(|e| {
-            tracing::error!("Failed to parse TOML config: {}", e);
-            e
-        })?;
-
-        self.bootstrap.port = config.port;
-
-        let registry = env::var(REGISTRY_TYPE);
-        self.bootstrap.registry = if let Ok(tpy) = &registry {
-            match tpy.clone().as_str() {
-                REGISTRY_TYPE_SELF_MANAGEMENT => Registry::SelfManagement,
-                REGISTRY_TYPE_NACOS => Registry::Nacos(NacosConfig {}),
-                REGISTRY_TYPE_REDIS => Registry::Redis(RedisConfig {}),
-                REGISTRY_TYPE_EXTERNAL_API => build_external_api_registry()?,
-                _ => return Err("Unsupported registration types".into()),
-            }
-        } else {
-            // default use self management
-            Registry::SelfManagement
-        };
-
-        Ok(())
-    }
-
-    fn run(&mut self, shutdown: CancellationToken, rt: Runtime) -> Result<(), Box<dyn Error>> {
-        self.start(Box::new(ShutdownSign::new(shutdown)), rt)?;
-        Ok(())
-    }
-}
-
-struct ShutdownSign(CancellationToken);
-
-impl ShutdownSign {
-    pub fn new(cancel: CancellationToken) -> Self {
-        Self(cancel)
-    }
-}
-
-#[async_trait]
-impl ShutdownSignalWatch for ShutdownSign {
-    async fn recv(&self) -> ShutdownSignal {
-        self.0.cancelled().await;
-        ShutdownSignal::FastShutdown
-    }
-}
 
 struct McpServerInfo {
     lb: LoadBalancer<RoundRobin>,
     pub endpoint: String,
 }
 
-struct ProxyService {
+pub(crate) struct ProxyService {
     handle: Arc<Box<dyn ListHandler>>,
     runtime: Arc<Runtime>,
 
@@ -279,6 +128,7 @@ impl ProxyService {
                     );
                 });
 
+                // ---------test----------
                 let upstream = match LoadBalancer::try_from_iter(["127.0.0.1:3000"]) {
                     Ok(result) => result,
                     Err(err) => {
@@ -300,8 +150,7 @@ impl ProxyService {
                     },
                 );
                 mcps.insert("local".to_string(), tmp);
-
-                tracing::info!("Mcp servers: {:?}", mcps.len());
+                //--------------------
             }
         });
     }
@@ -395,6 +244,8 @@ impl ProxyService {
         ctx.scheme = parsed.scheme.clone();
         ctx.port = parsed.port.clone();
         ctx.backend = Some(backend);
+        ctx.name = mcp_name.clone();
+        ctx.tag = tag.clone();
 
         Ok(())
     }
@@ -485,6 +336,7 @@ impl ProxyHttp for ProxyService {
     where
         Self::CTX: Send + Sync,
     {
+        tracing::info!("Request filter =====> {}", session.req_header().uri);
         if session.req_header().uri == "/" {
             self.build_context_from_header(session, ctx).await?;
             return Ok(false);
@@ -585,11 +437,9 @@ impl ProxyHttp for ProxyService {
                     let sid = session_id.to_string().clone();
 
                     // waiting session info save
-                    self.runtime.block_on(async move {
-                        manager.save(&sid, SessionInfo { name, tag }).await.unwrap()
-                    });
-                } else {
-                    println!("No sessionId found");
+                    if let Err(err) = manager.save(&sid, SessionInfo { name, tag }) {
+                        tracing::error!("error while saving session: {}", err);
+                    }
                 }
             }
         }
@@ -597,7 +447,7 @@ impl ProxyHttp for ProxyService {
     }
 }
 
-struct ProxyContext {
+pub(crate) struct ProxyContext {
     regex: Regex,
     scheme: String,
     endpoint: String,
@@ -623,23 +473,6 @@ impl ProxyContext {
             tag: String::from(""),
         }
     }
-}
-
-fn build_external_api_registry() -> Result<Registry, Box<dyn Error>> {
-    let mut config = ExternalApiConfig {
-        url: env::var(envs::EXTERNAL_API)?,
-        authorization: None,
-    };
-
-    config.authorization = match env::var(envs::EXTERNAL_API_AUTHORIZATION) {
-        Ok(auth) => Some(auth),
-        Err(_) => {
-            tracing::warn!("External API authorization env variable not set");
-            None
-        }
-    };
-
-    Ok(Registry::ExternalAPI(config))
 }
 
 struct ParsedEndpoint {

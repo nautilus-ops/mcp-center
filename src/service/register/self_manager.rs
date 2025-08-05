@@ -15,6 +15,6 @@ impl SelfManagerHandler {
 #[async_trait::async_trait]
 impl ListHandler for SelfManagerHandler {
     async fn list_mcp(&self) -> Result<Vec<McpServer>, Box<dyn Error>> {
-        todo!()
+        Ok(Vec::new())
     }
 }
