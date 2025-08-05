@@ -56,7 +56,7 @@ impl Manager for LocalManager {
         let dir_path = build_path(session_id);
 
         let content = fs::read_to_string(dir_path).map_err(|e| ManagerError::new(e.to_string().as_str()))?;
-        
+
         parse_content(&content).map_err(|e| ManagerError::new(e.to_string().as_str()))
     }
 
@@ -73,7 +73,7 @@ impl Manager for LocalManager {
             .write(true)
             .create_new(true)
             .open(dir_path).map_err(|e| ManagerError::new(e.to_string().as_str()))?;
-        
+
         file.write_all(
             format!("{} {} {} {}", info.name, info.tag, info.scheme, info.host).as_bytes(),
         ).map_err(|e| ManagerError::new(e.to_string().as_str()))?;
@@ -121,7 +121,11 @@ fn load_sessions(expiration: Duration) -> Result<Vec<(String, SessionInfo)>, Box
 
             let session_id = entry.file_name().to_string_lossy().into_owned();
             let info = parse_content(&content)?;
+
+            tracing::info!("loaded session {}", session_id);
+
             res.push((session_id, info));
+
         }
     }
 
