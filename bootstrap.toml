@@ -1,4 +1,8 @@
-[mcp-center]
+[mcp_center]
 http_port = "${HTTP_PORT:5432}"
 grpc_port = "${GRPC_PORT:5433}"
 
+[mcp_registry]
+type = "${REGISTRY_TYPE:memory}"
+url = "${EXTERNAL_API}"
+token = "${EXTERNAL_AUTHORIZATION}"
