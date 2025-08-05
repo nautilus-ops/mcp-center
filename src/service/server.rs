@@ -7,7 +7,7 @@ use pingora_core::server::{RunArgs, ShutdownSignal, ShutdownSignalWatch};
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
 use crate::app::application::Application;
-use crate::app::config::{AppConfig, McpRegistry};
+use crate::service::config::{AppConfig, McpRegistry};
 use crate::common::utils;
 use crate::service::proxy;
 use crate::service::register::external_api::ExternalApiHandler;
@@ -34,11 +34,13 @@ struct Bootstrap {
 
 pub struct MainServer {
     bootstrap: Bootstrap,
+    config: AppConfig
 }
 impl MainServer {
     pub fn new() -> Self {
         Self {
             bootstrap: Default::default(),
+            config: Default::default(),
         }
     }
 
@@ -63,7 +65,7 @@ impl MainServer {
 
         let mut service = pingora_proxy::http_proxy_service_with_name(
             &server.configuration,
-            proxy::ProxyService::new(handler, runtime.clone()),
+            proxy::ProxyService::new(handler, runtime.clone(),self.config.clone()),
             "McpGateway",
         );
 
@@ -95,6 +97,8 @@ impl Application for MainServer {
         })?;
 
         tracing::debug!("The application config: \n{:?}", config);
+
+        self.config = config.clone();
 
         self.bootstrap.port = config.mcp_center.http_port;
 

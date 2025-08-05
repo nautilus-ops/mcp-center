@@ -1,3 +1,4 @@
+use crate::service::config::AppConfig;
 use crate::service::register::ListHandler;
 use crate::service::session;
 use crate::service::session::SessionInfo;
@@ -5,7 +6,7 @@ use crate::service::session::manager::LocalManager;
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::{StatusCode, Uri};
-use pingora_core::prelude::{HttpPeer};
+use pingora_core::prelude::HttpPeer;
 use pingora_core::protocols::http::ServerSession as HttpSession;
 use pingora_core::{ErrorType, InternalError};
 use pingora_http::{RequestHeader, ResponseHeader};
@@ -37,12 +38,12 @@ pub(crate) struct ProxyService {
 }
 
 impl ProxyService {
-    pub fn new(handle: Box<dyn ListHandler>, runtime: Arc<Runtime>) -> Self {
+    pub fn new(handle: Box<dyn ListHandler>, runtime: Arc<Runtime>, config: AppConfig) -> Self {
         let service = Self {
             handle: Arc::new(handle),
             runtime,
             cache: Arc::new(RwLock::new(HashMap::new())),
-            session_manager: Arc::new(Box::new(LocalManager::new())),
+            session_manager: Arc::new(Box::new(LocalManager::new(config.session_manager.clone()))),
         };
 
         service.async_cache();
@@ -250,6 +251,33 @@ impl ProxyService {
         Ok(())
     }
 
+    pub(crate) async fn build_context_from_message(
+        &self,
+        session_id: &str,
+        ctx: &mut ProxyContext,
+    ) -> pingora_core::Result<()> {
+        let manager = self.session_manager.clone();
+        let info = manager.load(session_id).map_err(|e| {
+            tracing::error!("Can't load session {}: {}", session_id, e);
+            pingora_core::Error::explain(
+                InternalError,
+                format!("Can't load session {}: {}", session_id, e),
+            )
+        })?;
+
+        let (backend, parsed) = self.load_mcp_info_from_cache(&info.name, &info.tag).await?;
+
+        ctx.endpoint = parsed.endpoint.clone();
+        ctx.path = parsed.path.clone();
+        ctx.host = parsed.host.clone();
+        ctx.scheme = parsed.scheme.clone();
+        ctx.port = parsed.port.clone();
+        ctx.backend = Some(backend);
+        ctx.name = info.name.clone();
+        ctx.tag = info.tag.clone();
+        Ok(())
+    }
+
     async fn load_mcp_info_from_cache(
         &self,
         mcp_name: &str,
@@ -337,6 +365,7 @@ impl ProxyHttp for ProxyService {
         Self::CTX: Send + Sync,
     {
         tracing::info!("Request filter =====> {}", session.req_header().uri);
+        tracing::info!("Request filter =====> {}", session.req_header().method);
         if session.req_header().uri == "/" {
             self.build_context_from_header(session, ctx).await?;
             return Ok(false);
@@ -365,6 +394,12 @@ impl ProxyHttp for ProxyService {
             return Ok(true);
         }
 
+        let session_id = parse_message(session.req_header().uri.to_string().as_str());
+        if session_id != "" {
+            self.build_context_from_message(&session_id, ctx).await?;
+            return Ok(false);
+        }
+
         let content = String::from("Invalid URI");
 
         self.return_error_response(
@@ -380,7 +415,7 @@ impl ProxyHttp for ProxyService {
 
     async fn upstream_request_filter(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> pingora_core::Result<()>
@@ -390,6 +425,13 @@ impl ProxyHttp for ProxyService {
         if ctx.scheme == "https" {
             upstream_request.insert_header("Host", ctx.host.clone())?;
         }
+
+        // TODO Change to a more optimal logic to distinguish between /message and the initial connection.
+        let session_id = parse_message(session.req_header().uri.to_string().as_str());
+        if session_id != "" {
+            return Ok(());
+        }
+
         let uri = Uri::from_str(ctx.path.as_str()).unwrap();
         upstream_request.set_uri(uri);
         Ok(())
@@ -397,7 +439,7 @@ impl ProxyHttp for ProxyService {
 
     async fn response_filter(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         upstream_response: &mut ResponseHeader,
         _ctx: &mut Self::CTX,
     ) -> pingora_core::Result<()>
@@ -407,6 +449,7 @@ impl ProxyHttp for ProxyService {
         tracing::info!("response_filter {:?}", upstream_response);
         Ok(())
     }
+
 
     fn upstream_response_body_filter(
         &self,
@@ -434,10 +477,20 @@ impl ProxyHttp for ProxyService {
                     let manager = self.session_manager.clone();
                     let name = ctx.name.clone();
                     let tag = ctx.tag.clone();
+                    let scheme = ctx.scheme.clone();
+                    let host = ctx.host.clone();
                     let sid = session_id.to_string().clone();
 
                     // waiting session info save
-                    if let Err(err) = manager.save(&sid, SessionInfo { name, tag }) {
+                    if let Err(err) = manager.save(
+                        &sid,
+                        SessionInfo {
+                            name,
+                            tag,
+                            scheme,
+                            host,
+                        },
+                    ) {
                         tracing::error!("error while saving session: {}", err);
                     }
                 }
@@ -475,6 +528,7 @@ impl ProxyContext {
     }
 }
 
+#[derive(Debug, Clone)]
 struct ParsedEndpoint {
     endpoint: String,
     host: String,
@@ -512,4 +566,18 @@ fn parse_endpoint(endpoint: &str) -> Result<ParsedEndpoint, Box<dyn Error>> {
     } else {
         Err(format!("Failed to parse endpoint {}", endpoint).into())
     }
+}
+
+fn parse_message(uri: &str) -> String {
+    let re = Regex::new(r"^/message\?sessionId=([0-9a-fA-F\-]+)$").unwrap();
+
+    if let Some(id) = re
+        .captures(uri)
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().to_string())
+    {
+        return id.clone();
+    };
+
+    "".to_owned()
 }

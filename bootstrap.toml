@@ -6,3 +6,6 @@ grpc_port = "${GRPC_PORT:5433}"
 type = "${REGISTRY_TYPE:memory}"
 url = "${EXTERNAL_API}"
 token = "${EXTERNAL_AUTHORIZATION}"
+
+[session_manager]
+expiration = "${SESSION_EXPIRATION:604800}" # Default 7 days

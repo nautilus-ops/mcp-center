@@ -6,6 +6,8 @@ pub struct AppConfig {
     pub mcp_center: McpCenter,
     #[serde(default)]
     pub mcp_registry: McpRegistry,
+    #[serde(default)]
+    pub session_manager: SessionManager,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -24,4 +26,10 @@ pub enum McpRegistry {
     LocalMemory,
     #[serde(rename = "external")]
     External { url: String, token: Option<String> },
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct SessionManager {
+    #[serde(default)]
+    pub expiration: u64
 }
