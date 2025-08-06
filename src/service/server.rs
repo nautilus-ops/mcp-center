@@ -1,18 +1,18 @@
-use std::error::Error;
-use std::fs;
-use std::sync::Arc;
+use crate::app::application::Application;
+use crate::common::utils;
+use crate::service::config::{AppConfig, McpRegistry};
+use crate::service::proxy;
+use crate::service::register::ListHandler;
+use crate::service::register::external_api::ExternalApiHandler;
+use crate::service::register::self_manager::SelfManagerHandler;
 use async_trait::async_trait;
 use pingora_core::prelude::Server;
 use pingora_core::server::{RunArgs, ShutdownSignal, ShutdownSignalWatch};
+use std::error::Error;
+use std::fs;
+use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
-use crate::app::application::Application;
-use crate::service::config::{AppConfig, McpRegistry};
-use crate::common::utils;
-use crate::service::proxy;
-use crate::service::register::external_api::ExternalApiHandler;
-use crate::service::register::ListHandler;
-use crate::service::register::self_manager::SelfManagerHandler;
 
 #[derive(Default)]
 pub enum Registry {
@@ -34,7 +34,7 @@ struct Bootstrap {
 
 pub struct MainServer {
     bootstrap: Bootstrap,
-    config: AppConfig
+    config: AppConfig,
 }
 impl MainServer {
     pub fn new() -> Self {
@@ -65,7 +65,7 @@ impl MainServer {
 
         let mut service = pingora_proxy::http_proxy_service_with_name(
             &server.configuration,
-            proxy::ProxyService::new(handler, runtime.clone(),self.config.clone()),
+            proxy::ProxyService::new(handler, runtime.clone(), self.config.clone()),
             "McpGateway",
         );
 

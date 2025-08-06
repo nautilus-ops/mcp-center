@@ -1,5 +1,5 @@
-use std::env;
 use regex::Regex;
+use std::env;
 
 pub fn replace_env_variables(input: String) -> String {
     let re = Regex::new(r#""\$\{(\w+)(?::([^}]*))?\}""#).unwrap();
@@ -14,9 +14,9 @@ pub fn replace_env_variables(input: String) -> String {
             val
         } else if val == "true" || val == "false" {
             format!("{}", val)
-        }else {
+        } else {
             format!("\"{}\"", val)
         }
     })
-        .into_owned()
+    .into_owned()
 }

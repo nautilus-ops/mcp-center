@@ -55,7 +55,8 @@ impl Manager for LocalManager {
 
         let dir_path = build_path(session_id);
 
-        let content = fs::read_to_string(dir_path).map_err(|e| ManagerError::new(e.to_string().as_str()))?;
+        let content =
+            fs::read_to_string(dir_path).map_err(|e| ManagerError::new(e.to_string().as_str()))?;
 
         parse_content(&content).map_err(|e| ManagerError::new(e.to_string().as_str()))
     }
@@ -72,11 +73,13 @@ impl Manager for LocalManager {
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(dir_path).map_err(|e| ManagerError::new(e.to_string().as_str()))?;
+            .open(dir_path)
+            .map_err(|e| ManagerError::new(e.to_string().as_str()))?;
 
         file.write_all(
             format!("{} {} {} {}", info.name, info.tag, info.scheme, info.host).as_bytes(),
-        ).map_err(|e| ManagerError::new(e.to_string().as_str()))?;
+        )
+        .map_err(|e| ManagerError::new(e.to_string().as_str()))?;
         Ok(())
     }
 }
@@ -125,7 +128,6 @@ fn load_sessions(expiration: Duration) -> Result<Vec<(String, SessionInfo)>, Box
             tracing::info!("loaded session {}", session_id);
 
             res.push((session_id, info));
-
         }
     }
 

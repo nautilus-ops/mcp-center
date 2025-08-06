@@ -1,10 +1,8 @@
-use std::error::Error;
 use crate::service::register::{ListHandler, McpServer};
+use std::error::Error;
 
-#[derive(Debug,Default)]
-pub struct SelfManagerHandler {
-}
-
+#[derive(Debug, Default)]
+pub struct SelfManagerHandler {}
 
 impl SelfManagerHandler {
     pub fn new() -> Self {

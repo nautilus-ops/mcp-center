@@ -31,5 +31,5 @@ pub enum McpRegistry {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct SessionManager {
     #[serde(default)]
-    pub expiration: u64
+    pub expiration: u64,
 }

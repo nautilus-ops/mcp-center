@@ -1,15 +1,15 @@
+use crate::booter::Booter;
+use crate::service::server::MainServer;
 use std::env;
 use std::error::Error;
-use crate::booter::Booter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry;
 use tracing_subscriber::util::SubscriberInitExt;
-use crate::service::server::MainServer;
 
 mod app;
 mod booter;
-mod service;
 mod common;
+mod service;
 
 fn main() -> Result<(), Box<dyn Error>> {
     registry()
@@ -19,7 +19,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
-    
 
     if let Err(err) = Booter::run(MainServer::new()) {
         tracing::error!("Failed to start application: {}", err);

@@ -450,7 +450,6 @@ impl ProxyHttp for ProxyService {
         Ok(())
     }
 
-
     fn upstream_response_body_filter(
         &self,
         session: &mut Session,

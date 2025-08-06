@@ -1,10 +1,10 @@
+use async_trait::async_trait;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use async_trait::async_trait;
 
 pub mod manager;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct SessionInfo {
     pub name: String,
     pub tag: String,
@@ -12,14 +12,15 @@ pub struct SessionInfo {
     pub host: String,
 }
 
-
 pub struct ManagerError {
     details: String,
 }
 
 impl ManagerError {
     pub fn new(details: &str) -> ManagerError {
-        ManagerError { details: details.to_string() }
+        ManagerError {
+            details: details.to_string(),
+        }
     }
 }
 
@@ -35,9 +36,7 @@ impl Display for ManagerError {
     }
 }
 
-impl Error for ManagerError {
-
-}
+impl Error for ManagerError {}
 
 /// The `Manager` trait defines an interface for loading and saving session information.
 ///
