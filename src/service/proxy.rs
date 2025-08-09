@@ -171,97 +171,13 @@ impl ProxyService {
         None
     }
 
-    pub(crate) async fn build_context_from_header(
-        &self,
-        session: &mut Session,
-        ctx: &mut ProxyContext,
-    ) -> pingora_core::Result<()> {
-        let name = match session.req_header().headers.get("Proxy-Mcp-Name") {
-            None => {
-                tracing::error!("Can't find Proxy-Mcp-Name header");
-                return Err(pingora_core::Error::explain(
-                    InternalError,
-                    "Can't get Proxy-Mcp-Name from headers.",
-                ));
-            }
-            Some(value) => value.to_str().map_err(|_| {
-                tracing::error!("Can't parse Proxy-Mcp-Name from header.");
-                pingora_core::Error::explain(
-                    InternalError,
-                    "Can't parse Proxy-Mcp-Name from headers.",
-                )
-            })?,
-        };
-
-        let version = match session.req_header().headers.get("Proxy-Mcp-Version") {
-            None => {
-                tracing::error!("Can't get Proxy-Mcp-Version from headers.");
-                return Err(pingora_core::Error::explain(
-                    InternalError,
-                    "Can't get Proxy-Mcp-Version from headers.",
-                ));
-            }
-            Some(value) => value.to_str().map_err(|_| {
-                tracing::error!("Can't parse Proxy-Mcp-Version from headers.");
-                pingora_core::Error::explain(
-                    InternalError,
-                    "Can't parse Proxy-Mcp-Version from headers.",
-                )
-            })?,
-        };
-
-        let (backend, parsed) = self.load_mcp_info_from_cache(name, version).await?;
-        ctx.endpoint = parsed.endpoint.clone();
-        ctx.path = parsed.path.clone();
-        ctx.host = parsed.host.clone();
-        ctx.scheme = parsed.scheme.clone();
-        ctx.port = parsed.port.clone();
-        ctx.backend = Some(backend);
-        ctx.name = name.to_string();
-        ctx.tag = version.to_string();
-        Ok(())
-    }
-
-    pub(crate) async fn build_context_from_uri(
-        &self,
-        session: &mut Session,
-        ctx: &mut ProxyContext,
-    ) -> pingora_core::Result<()> {
-        let (mcp_name, tag) = match ctx
-            .regex
-            .captures(session.req_header().uri.to_string().as_str())
-        {
-            None => {
-                tracing::error!("Can't parse uri {}", session.req_header().uri);
-                return Err(pingora_core::Error::new(InternalError));
-            }
-            Some(caps) => (caps[1].to_string(), caps[2].to_string()),
-        };
-
-        let (backend, parsed) = self
-            .load_mcp_info_from_cache(mcp_name.as_str(), tag.as_str())
-            .await?;
-        ctx.endpoint = parsed.endpoint.clone();
-        ctx.path = parsed.path.clone();
-        ctx.host = parsed.host.clone();
-        ctx.scheme = parsed.scheme.clone();
-        ctx.port = parsed.port.clone();
-        ctx.backend = Some(backend);
-        ctx.name = mcp_name.clone();
-        ctx.tag = tag.clone();
-
-        Ok(())
-    }
-
     pub(crate) async fn build_context_from_connection(
         &self,
         name: &str,
         tag: &str,
         ctx: &mut ProxyContext,
     ) -> pingora_core::Result<()> {
-        let (backend, parsed) = self
-            .load_mcp_info_from_cache(name.clone(), tag.clone())
-            .await?;
+        let (backend, parsed) = self.load_mcp_info_from_cache(name, tag).await?;
 
         ctx.endpoint = parsed.endpoint.clone();
         ctx.path = parsed.path.clone();
@@ -434,7 +350,7 @@ impl ProxyHttp for ProxyService {
 
     async fn response_filter(
         &self,
-        session: &mut Session,
+        _session: &mut Session,
         upstream_response: &mut ResponseHeader,
         _ctx: &mut Self::CTX,
     ) -> pingora_core::Result<()>
@@ -496,7 +412,6 @@ impl ProxyHttp for ProxyService {
 }
 
 pub(crate) struct ProxyContext {
-    regex: Regex,
     scheme: String,
     endpoint: String,
     host: String,
@@ -510,7 +425,6 @@ pub(crate) struct ProxyContext {
 impl ProxyContext {
     pub fn new() -> Self {
         Self {
-            regex: Regex::new(r"^/connect/([^/]+)/([^/]+)/([^/]+)(/.*)?$").unwrap(),
             scheme: String::from("https"),
             endpoint: String::from(""),
             host: String::from(""),

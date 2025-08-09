@@ -11,10 +11,6 @@ use std::time::{Duration, SystemTime};
 
 const SESSION_DIR_PATH: &str = "sessions";
 
-const HOUR: u64 = 3600;
-
-const DEFAULT_EXPIRATION: u64 = HOUR * 24 * 7;
-
 #[derive(Clone)]
 pub struct LocalManager {
     cache: Arc<Mutex<TimedSizedCache<String, SessionInfo>>>,
