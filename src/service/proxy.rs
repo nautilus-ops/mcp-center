@@ -1,11 +1,12 @@
 use crate::service::config::AppConfig;
 use crate::service::register::ListHandler;
-use crate::service::session;
+use crate::service::router::{Matcher, Router};
 use crate::service::session::SessionInfo;
 use crate::service::session::manager::LocalManager;
+use crate::service::{router, session};
 use async_trait::async_trait;
 use bytes::Bytes;
-use http::{StatusCode, Uri};
+use http::Uri;
 use pingora_core::prelude::HttpPeer;
 use pingora_core::protocols::http::ServerSession as HttpSession;
 use pingora_core::{ErrorType, InternalError};
@@ -31,9 +32,9 @@ struct McpServerInfo {
 pub(crate) struct ProxyService {
     handle: Arc<Box<dyn ListHandler>>,
     runtime: Arc<Runtime>,
-
+    router_matcher: Arc<Matcher>,
     // mcp-name -> tag(version) -> load-balancer
-    cache: Arc<RwLock<HashMap<String, HashMap<String, McpServerInfo>>>>,
+    server_cache: Arc<RwLock<HashMap<String, HashMap<String, McpServerInfo>>>>,
     session_manager: Arc<Box<dyn session::Manager>>,
 }
 
@@ -42,7 +43,8 @@ impl ProxyService {
         let service = Self {
             handle: Arc::new(handle),
             runtime,
-            cache: Arc::new(RwLock::new(HashMap::new())),
+            router_matcher: Arc::new(Matcher::new()),
+            server_cache: Arc::new(RwLock::new(HashMap::new())),
             session_manager: Arc::new(Box::new(LocalManager::new(config.session_manager.clone()))),
         };
 
@@ -57,7 +59,7 @@ impl ProxyService {
     }
 
     pub fn async_cache(&self) {
-        let cache = self.cache.clone();
+        let cache = self.server_cache.clone();
         let handle = self.handle.clone();
         self.runtime.spawn(async move {
             let mut ticker = interval(Duration::from_secs(24 * 60 * 60));
@@ -129,7 +131,7 @@ impl ProxyService {
                     );
                 });
 
-                // ---------test----------
+                // TODO delete ---------test----------
                 let upstream = match LoadBalancer::try_from_iter(["127.0.0.1:3000"]) {
                     Ok(result) => result,
                     Err(err) => {
@@ -151,13 +153,13 @@ impl ProxyService {
                     },
                 );
                 mcps.insert("local".to_string(), tmp);
-                //--------------------
+                // TODO delete --------------------
             }
         });
     }
 
     async fn load_server_info(&self, mcp_name: &str, tag: &str) -> Option<(Backend, String)> {
-        let cache = self.cache.read().await;
+        let cache = self.server_cache.read().await;
         if let Some(tags) = cache.get(mcp_name) {
             if let Some(info) = tags.get(tag) {
                 return match info.lb.select(b"", 256) {
@@ -248,6 +250,27 @@ impl ProxyService {
         ctx.name = mcp_name.clone();
         ctx.tag = tag.clone();
 
+        Ok(())
+    }
+
+    pub(crate) async fn build_context_from_connection(
+        &self,
+        name: &str,
+        tag: &str,
+        ctx: &mut ProxyContext,
+    ) -> pingora_core::Result<()> {
+        let (backend, parsed) = self
+            .load_mcp_info_from_cache(name.clone(), tag.clone())
+            .await?;
+
+        ctx.endpoint = parsed.endpoint.clone();
+        ctx.path = parsed.path.clone();
+        ctx.host = parsed.host.clone();
+        ctx.scheme = parsed.scheme.clone();
+        ctx.port = parsed.port.clone();
+        ctx.backend = Some(backend);
+        ctx.name = name.to_string();
+        ctx.tag = tag.to_string();
         Ok(())
     }
 
@@ -364,53 +387,25 @@ impl ProxyHttp for ProxyService {
     where
         Self::CTX: Send + Sync,
     {
-        tracing::info!("Request filter =====> {}", session.req_header().uri);
-        tracing::info!("Request filter =====> {}", session.req_header().method);
-        if session.req_header().uri == "/" {
-            self.build_context_from_header(session, ctx).await?;
-            return Ok(false);
-        }
+        tracing::info!(
+            "Request filter method: {} uri： {}",
+            session.req_header().method,
+            session.req_header().uri
+        );
 
-        if let Some(caps) = ctx
-            .regex
-            .captures(session.req_header().uri.to_string().as_str())
-        {
-            let transport_type = &caps[3];
-            if transport_type == "sse" || transport_type == "streamable" {
-                self.build_context_from_uri(session, ctx).await?;
-                return Ok(false);
+        let router = self.router_matcher.matching(session)?;
+
+        match router {
+            Router::ConnectRouter(name, tag) => {
+                self.build_context_from_connection(name.as_str(), tag.as_str(), ctx)
+                    .await?;
+                Ok(false)
             }
-
-            let content = String::from("not supported transport type");
-
-            self.return_error_response(
-                session,
-                StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-                Bytes::from(content),
-            )
-            .await?;
-
-            tracing::error!("not supported transport type: {}", transport_type);
-            return Ok(true);
+            Router::MessageRouter(session_id) => {
+                self.build_context_from_message(&session_id, ctx).await?;
+                Ok(false)
+            }
         }
-
-        let session_id = parse_message(session.req_header().uri.to_string().as_str());
-        if session_id != "" {
-            self.build_context_from_message(&session_id, ctx).await?;
-            return Ok(false);
-        }
-
-        let content = String::from("Invalid URI");
-
-        self.return_error_response(
-            session,
-            StatusCode::NOT_FOUND.as_u16(),
-            Bytes::from(content),
-        )
-        .await?;
-
-        tracing::error!("Invalid URI : {}", session.req_header().uri);
-        Ok(true)
     }
 
     async fn upstream_request_filter(
@@ -457,14 +452,15 @@ impl ProxyHttp for ProxyService {
         _end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> pingora_core::Result<()> {
-        let path = session.req_header().uri.path();
-        if path.ends_with("/sse") {
-            if let Some(body) = body.clone() {
-                let text = String::from_utf8_lossy(body.as_ref());
+        if let Some(body) = body.clone() {
+            let content = String::from_utf8_lossy(body.as_ref());
+            tracing::debug!("upstream_response_body_filter {:?}", content);
 
+            let path = session.req_header().uri.path();
+            if path.ends_with("/sse") {
                 let re = Regex::new(r"sessionId=([a-f0-9-]+)").unwrap();
 
-                if let Some(caps) = re.captures(&text) {
+                if let Some(caps) = re.captures(&content) {
                     let session_id = caps.get(1).map(|m| m.as_str()).unwrap();
                     tracing::info!(
                         "connect mcp success sessionId={}, name={}, tag={}",
