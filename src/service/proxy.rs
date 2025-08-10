@@ -1,14 +1,13 @@
 use crate::service::config::AppConfig;
-use crate::service::register::ListHandler;
+use crate::service::register::Registry;
 use crate::service::router::{Matcher, Router};
+use crate::service::session;
 use crate::service::session::SessionInfo;
 use crate::service::session::manager::LocalManager;
-use crate::service::{router, session};
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::Uri;
 use pingora_core::prelude::HttpPeer;
-use pingora_core::protocols::http::ServerSession as HttpSession;
 use pingora_core::{ErrorType, InternalError};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_load_balancing::prelude::RoundRobin;
@@ -30,7 +29,7 @@ struct McpServerInfo {
 }
 
 pub(crate) struct ProxyService {
-    handle: Arc<Box<dyn ListHandler>>,
+    handle: Arc<Box<dyn Registry>>,
     runtime: Arc<Runtime>,
     router_matcher: Arc<Matcher>,
     // mcp-name -> tag(version) -> load-balancer
@@ -39,7 +38,7 @@ pub(crate) struct ProxyService {
 }
 
 impl ProxyService {
-    pub fn new(handle: Box<dyn ListHandler>, runtime: Arc<Runtime>, config: AppConfig) -> Self {
+    pub fn new(handle: Box<dyn Registry>, runtime: Arc<Runtime>, config: AppConfig) -> Self {
         let service = Self {
             handle: Arc::new(handle),
             runtime,
@@ -48,7 +47,7 @@ impl ProxyService {
             session_manager: Arc::new(Box::new(LocalManager::new(config.session_manager.clone()))),
         };
 
-        service.async_cache();
+        service.async_cache(config.mcp_center.cache_reflash_interval);
 
         service
     }
@@ -58,11 +57,11 @@ impl ProxyService {
         self.session_manager = Arc::new(manager)
     }
 
-    pub fn async_cache(&self) {
+    pub fn async_cache(&self, cache_interval: u64) {
         let cache = self.server_cache.clone();
         let handle = self.handle.clone();
         self.runtime.spawn(async move {
-            let mut ticker = interval(Duration::from_secs(24 * 60 * 60));
+            let mut ticker = interval(Duration::from_secs(cache_interval));
             loop {
                 ticker.tick().await;
 
@@ -244,24 +243,6 @@ impl ProxyService {
             }
         };
         Ok((backend, parsed))
-    }
-
-    // generate an error response and return
-    async fn return_error_response(
-        &self,
-        session: &mut Session,
-        status_code: u16,
-        content: Bytes,
-    ) -> pingora_core::Result<()> {
-        let mut response_header = HttpSession::generate_error(status_code);
-
-        response_header.insert_header("Server", "MCP-Proxy")?;
-        response_header.set_content_length(content.len())?;
-
-        session
-            .write_error_response(response_header, Bytes::from(content))
-            .await?;
-        Ok(())
     }
 }
 #[async_trait]

@@ -10,11 +10,11 @@ pub struct McpServer {
     pub name: String,
     pub version: Option<String>,
     pub tag: Option<String>,
-    #[serde(rename = "isPublished")]
+    #[serde(rename = "is_published")]
     pub is_published: Option<bool>,
 }
 
 #[async_trait::async_trait]
-pub trait ListHandler: Send + Sync {
+pub trait Registry: Send + Sync {
     async fn list_mcp(&self) -> Result<Vec<McpServer>, Box<dyn Error>>;
 }

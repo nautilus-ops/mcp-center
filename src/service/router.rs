@@ -1,6 +1,6 @@
 use pingora_core::{HTTPStatus, InternalError};
 use pingora_proxy::Session;
-use regex::{Captures, Regex};
+use regex::Regex;
 
 pub enum Router {
     ConnectRouter(String, String),
@@ -67,7 +67,7 @@ impl Matcher {
         }
     }
 
-    pub fn parse_message_router(&self, uri: &str) -> pingora_core::Result<(String)> {
+    pub fn parse_message_router(&self, uri: &str) -> pingora_core::Result<String> {
         if let Some(id) = self
             .message_regex
             .captures(uri)

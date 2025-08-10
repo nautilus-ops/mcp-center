@@ -43,3 +43,5 @@ target/
 *.lfs*
 
 /sessions/
+
+mcp_servers.toml

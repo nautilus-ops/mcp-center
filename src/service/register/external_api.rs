@@ -1,4 +1,4 @@
-use crate::service::register::{ListHandler, McpServer};
+use crate::service::register::{Registry, McpServer};
 use reqwest::Client;
 use serde::Deserialize;
 use std::error::Error;
@@ -19,7 +19,7 @@ impl ExternalApiHandler {
 }
 
 #[async_trait::async_trait]
-impl ListHandler for ExternalApiHandler {
+impl Registry for ExternalApiHandler {
     async fn list_mcp(&self) -> Result<Vec<McpServer>, Box<dyn Error>> {
         let client = Client::new();
         let mut builder = client.get(self.url.as_str());

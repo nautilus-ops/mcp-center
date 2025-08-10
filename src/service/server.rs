@@ -1,10 +1,9 @@
 use crate::app::application::Application;
 use crate::common::utils;
 use crate::service::config::{AppConfig, McpRegistry};
-use crate::service::proxy;
-use crate::service::register::ListHandler;
+use crate::service::{proxy, register};
 use crate::service::register::external_api::ExternalApiHandler;
-use crate::service::register::self_manager::SelfManagerHandler;
+use crate::service::register::self_manager::SelfManagerRegistry;
 use async_trait::async_trait;
 use pingora_core::prelude::Server;
 use pingora_core::server::{RunArgs, ShutdownSignal, ShutdownSignalWatch};
@@ -14,11 +13,15 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
 
-#[derive(Default)]
 pub enum Registry {
-    #[default]
-    Memory,
+    Memory(String),
     ExternalAPI(ExternalApiConfig),
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        Self::Memory(String::from("mcp_servers.toml"))
+    }
 }
 
 pub struct ExternalApiConfig {
@@ -53,8 +56,8 @@ impl MainServer {
 
         server.bootstrap();
 
-        let handler: Box<dyn ListHandler> = match &self.bootstrap.registry {
-            Registry::Memory => Box::new(SelfManagerHandler::new()),
+        let handler: Box<dyn register::Registry> = match &self.bootstrap.registry {
+            Registry::Memory(path) => Box::new(SelfManagerRegistry::new(path.clone())),
             Registry::ExternalAPI(config) => Box::new(ExternalApiHandler::new(
                 config.url.as_str(),
                 config.authorization.clone(),
@@ -103,7 +106,9 @@ impl Application for MainServer {
         self.bootstrap.port = config.mcp_center.http_port;
 
         self.bootstrap.registry = match config.mcp_registry {
-            McpRegistry::LocalMemory => Registry::Memory,
+            McpRegistry::LocalMemory {
+                mcp_definition_path,
+            } => Registry::Memory(mcp_definition_path),
             McpRegistry::External { url, token } => build_external_api_registry(url, token),
         };
 

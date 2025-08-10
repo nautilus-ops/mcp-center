@@ -16,16 +16,23 @@ pub struct McpCenter {
     pub http_port: u16,
     #[serde(default)]
     pub grpc_port: u16, // TODO support grpc
+    #[serde(default)]
+    pub cache_reflash_interval: u64,
 }
 
-#[derive(Deserialize, Debug, Clone, Default)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum McpRegistry {
-    #[default]
     #[serde(rename = "memory")]
-    LocalMemory,
+    LocalMemory { mcp_definition_path: String },
     #[serde(rename = "external")]
     External { url: String, token: Option<String> },
+}
+
+impl Default for McpRegistry {
+    fn default() -> Self {
+        McpRegistry::LocalMemory { mcp_definition_path: "mcp_servers".to_string() }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
