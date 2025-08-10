@@ -10,13 +10,13 @@ A centralized platform for managing and connecting MCP (Model Context Protocol) 
 
 ## Features
 
-- ✅ **MCP Server Registry Center** - Centralized management of MCP server endpoints
-- ✅ **MCP SSE Transport Proxy** - Server-Sent Events transport support
-- ✅ **MCP Streamable Transport Proxy** - Streamable transport protocol support
-- ✅ **Multiple Registry Types** - Support for memory-based and external API registries
-- ✅ **Session Management** - Configurable session expiration and management for sse connection
-- ✅ **High Performance** - Built with Pingora proxy framework for optimal performance
-- ✅ **Kubernetes Ready** - Complete Helm chart for easy deployment
+- [x] **MCP Server Registry Center** - Centralized management of MCP server endpoints
+- [x] **MCP SSE Transport Proxy** - Server-Sent Events transport support
+- [x] **MCP Streamable Transport Proxy** - Streamable transport protocol support
+- [x] **Multiple Registry Types** - Support for memory-based and external API registries
+- [x] **Session Management** - Configurable session expiration and management for sse connection
+- [x] **High Performance** - Built with Pingora proxy framework for optimal performance
+- [x] **Kubernetes Ready** - Complete Helm chart for easy deployment
 
 ## Quick Start
 
