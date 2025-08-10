@@ -2,15 +2,3 @@
 # endpoint = "http://127.0.0.1:8080/sse"
 # name = "example"
 # tag = "1.0.0"
-#
-# connect mcp with router `/connect/{name}/{tag}`
-
-[[mcp_servers]]
-endpoint = "http://127.0.0.1:8080/sse"
-name = "mcp-calculator"
-tag = "1.0.0"
-
-[[mcp_servers]]
-endpoint = "http://127.0.0.1:3000/mcp"
-name = "mcp-fetch"
-tag = "1.0.0"
