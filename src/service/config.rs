@@ -31,7 +31,9 @@ pub enum McpRegistry {
 
 impl Default for McpRegistry {
     fn default() -> Self {
-        McpRegistry::LocalMemory { mcp_definition_path: "mcp_servers".to_string() }
+        McpRegistry::LocalMemory {
+            mcp_definition_path: "mcp_servers".to_string(),
+        }
     }
 }
 

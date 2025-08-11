@@ -1,9 +1,9 @@
 use crate::app::application::Application;
 use crate::common::utils;
 use crate::service::config::{AppConfig, McpRegistry};
-use crate::service::{proxy, register};
 use crate::service::register::external_api::ExternalApiHandler;
 use crate::service::register::self_manager::SelfManagerRegistry;
+use crate::service::{proxy, register};
 use async_trait::async_trait;
 use pingora_core::prelude::Server;
 use pingora_core::server::{RunArgs, ShutdownSignal, ShutdownSignalWatch};
