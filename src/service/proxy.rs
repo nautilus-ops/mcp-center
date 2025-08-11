@@ -354,7 +354,7 @@ impl ProxyHttp for ProxyService {
             tracing::debug!("upstream_response_body_filter {:?}", content);
 
             let path = session.req_header().uri.path();
-            if path.ends_with("/sse") {
+            if path.starts_with("/connect") || path == "/" {
                 let re = Regex::new(r"sessionId=([a-f0-9-]+)").unwrap();
 
                 if let Some(caps) = re.captures(&content) {

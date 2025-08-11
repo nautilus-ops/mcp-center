@@ -1,4 +1,4 @@
-use crate::service::register::{Registry, McpServer};
+use crate::service::register::{McpServer, Registry};
 use reqwest::Client;
 use serde::Deserialize;
 use std::error::Error;
