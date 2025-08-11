@@ -6,19 +6,20 @@
 ![Rust](https://img.shields.io/badge/-Rust-black?logo=rust&logoColor=white)
 ![MCP](https://img.shields.io/badge/-MCP-black?logo=modelcontextprotocol&logoColor=white)
 
-A centralized platform for managing and connecting MCP (Model Context Protocol) servers. MCP Center provides a high-performance proxy service that enables seamless communication between MCP clients and multiple MCP servers.
+A centralized platform for managing and connecting [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) servers. MCP Center provides a high-performance proxy service that enables seamless communication between MCP clients and multiple MCP servers.
 
 ## Features
 
-- [x] **MCP Server Registry Center** - Centralized management of MCP server endpoints
 - [x] **MCP SSE Transport Proxy** - Server-Sent Events transport support
 - [x] **MCP Streamable Transport Proxy** - Streamable transport protocol support
 - [x] **Multiple Registry Types** - Support for memory-based and external API registries
 - [x] **Session Management** - Configurable session expiration and management for sse connection
-- [x] **High Performance** - Built with Pingora proxy framework for optimal performance
+- [x] **High Performance** - Built with [Pingora](https://github.com/cloudflare/pingora) proxy framework for optimal performance
 - [x] **Kubernetes Ready** - Complete Helm chart for easy deployment
 
 ## Quick Start
+
+visit [here](docs/QUICK_START.md) to quick start
 
 ### Using Docker
 
@@ -186,6 +187,7 @@ This project is licensed under the Apache License, Version 2.0 - see the [LICENS
 
 ## Roadmap
 
+- [ ] **MCP Server Registry Center**: Centralized management of MCP server endpoints
 - [ ] **Authentication & Authorization**: JWT-based authentication
 - [ ] **Metrics & Monitoring**: Prometheus metrics and Grafana dashboards
 - [ ] **Load Balancing**: Advanced load balancing algorithms
