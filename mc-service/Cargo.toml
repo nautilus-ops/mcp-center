@@ -1,0 +1,25 @@
+[package]
+name = "mc-service"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mc-booter = {path = "../mc-booter"}
+mc-common = {path = "../mc-common"}
+mc-register = {path = "../mc-register"}
+
+async-trait = "0.1.88"
+pingora-core = { version = "0.5.0", features = ["openssl"] }
+pingora-http = { version = "0.5.0" }
+pingora-load-balancing = { version = "0.5.0" }
+pingora-proxy = { version = "0.5.0" }
+tokio = { version = "1.46.1", features = ["full"] }
+tokio-util = "0.7.15"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+bytes = "1.10.1"
+http = "1.3.1"
+serde = { version = "1.0.219", features = ["derive"] }
+toml = "0.9.4"
+cached = "0.56.0"
+regex = "1.11.1"

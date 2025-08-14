@@ -1,4 +1,4 @@
-use crate::service::register::{McpServer, Registry};
+use crate::{McpServer, Registry};
 use serde::Deserialize;
 use std::error::Error;
 use std::fs;

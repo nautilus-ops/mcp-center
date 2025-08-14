@@ -5,7 +5,7 @@ PLATFORM ?= linux/amd64,linux/arm64
 RELEASE ?= false
 
 start-local:
-	@RUST_LOG=$(LOG_LEVEL) cargo run -- run --config $(CONFIG)
+	@RUST_LOG=$(LOG_LEVEL) cargo run -p mc-service -- run --config $(CONFIG)
 
 
 # Build local Docker image
@@ -23,11 +23,11 @@ build-push-image:
 		echo "Example: make build-push-image IMAGE_REGISTER=your-registry.com/your-namespace"; \
 		exit 1; \
 	fi
-	@echo "Building and pushing Docker image to $(IMAGE_REGISTER)/mcp-center:latest"
+	@echo "Building and pushing Docker image to $(IMAGE_REGISTER)/mcp-center"
 	@docker buildx build \
 		--platform $(PLATFORM) \
-		--tag $(IMAGE_REGISTER)/mcp-center:latest \
 		--tag $(IMAGE_REGISTER)/mcp-center:$(shell grep '^version = ' Cargo.toml | cut -d'"' -f2)-$(shell date +%Y%m%d%H%M)-$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown") \
+		$(if $(filter true,$(RELEASE)),--tag $(IMAGE_REGISTER)/mcp-center:latest) \
 		$(if $(filter true,$(RELEASE)),--tag $(IMAGE_REGISTER)/mcp-center:$(shell grep '^version = ' Cargo.toml | cut -d'"' -f2)-release) \
 		--push \
 		.
