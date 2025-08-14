@@ -1,9 +1,9 @@
-use crate::app::application::Application;
-use crate::common::utils;
-use crate::service::config::{AppConfig, McpRegistry};
-use crate::service::register::external_api::ExternalApiHandler;
-use crate::service::register::self_manager::SelfManagerRegistry;
-use crate::service::{proxy, register};
+use crate::config::{AppConfig, McpRegistry};
+use crate::proxy;
+use mc_booter::app::application::Application;
+use mc_common::utils;
+use mc_register::external_api::ExternalApiHandler;
+use mc_register::self_manager::SelfManagerRegistry;
 use async_trait::async_trait;
 use pingora_core::prelude::Server;
 use pingora_core::server::{RunArgs, ShutdownSignal, ShutdownSignalWatch};
@@ -56,7 +56,7 @@ impl MainServer {
 
         server.bootstrap();
 
-        let handler: Box<dyn register::Registry> = match &self.bootstrap.registry {
+        let handler: Box<dyn mc_register::Registry> = match &self.bootstrap.registry {
             Registry::Memory(path) => Box::new(SelfManagerRegistry::new(path.clone())),
             Registry::ExternalAPI(config) => Box::new(ExternalApiHandler::new(
                 config.url.as_str(),

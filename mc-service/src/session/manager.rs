@@ -1,5 +1,3 @@
-use crate::service::config::SessionManager;
-use crate::service::session::{Manager, ManagerError, SessionInfo};
 use cached::{Cached, TimedSizedCache};
 use std::error::Error;
 use std::fs;
@@ -8,6 +6,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
+use crate::config::SessionManager;
+use crate::session::{Manager, ManagerError, SessionInfo};
 
 const SESSION_DIR_PATH: &str = "sessions";
 

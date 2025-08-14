@@ -1,15 +1,15 @@
-use crate::booter::Booter;
-use crate::service::server::MainServer;
-use std::env;
 use std::error::Error;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry;
 use tracing_subscriber::util::SubscriberInitExt;
+use mc_booter::booter::Booter;
+use crate::server::MainServer;
 
-mod app;
-mod booter;
-mod common;
-mod service;
+mod session;
+mod config;
+mod proxy;
+mod server;
+mod router;
 
 fn main() -> Result<(), Box<dyn Error>> {
     registry()

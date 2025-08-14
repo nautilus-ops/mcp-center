@@ -1,25 +1,9 @@
-[package]
-name = "mcp-center"
+[workspace]
+members = ["mc-booter", "mc-common", "mc-register", "mc-service"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
-
-[dependencies]
-async-trait = "0.1.88"
-clap = { version = "4.5.41", features = ["derive"] }
-pingora-core = { version = "0.5.0", features = ["openssl"] }
-pingora-http = { version = "0.5.0" }
-pingora-load-balancing = { version = "0.5.0" }
-pingora-proxy = { version = "0.5.0" }
-tokio = { version = "1.46.1", features = ["full"] }
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-tokio-util = "0.7.15"
-num_cpus = "1.17.0"
-reqwest = "0.12.22"
-bytes = "1.10.1"
-http = "1.3.1"
-regex = "1.11.1"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.141"
-toml = "0.9.4"
-cached = "0.56.0"
+license = "Apache-2.0"
+repository = "https://github.com/nautilus-ops/mcp-center"
+rust-version = "1.89.0"

@@ -1,9 +1,3 @@
-use crate::service::config::AppConfig;
-use crate::service::register::Registry;
-use crate::service::router::{Matcher, Router};
-use crate::service::session;
-use crate::service::session::SessionInfo;
-use crate::service::session::manager::LocalManager;
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::Uri;
@@ -22,19 +16,24 @@ use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::interval;
+use mc_register::Registry;
+use crate::config::AppConfig;
+use crate::router::{Matcher, Router};
+use crate::session::{Manager, SessionInfo};
+use crate::session::manager::LocalManager;
 
 struct McpServerInfo {
     lb: LoadBalancer<RoundRobin>,
     pub endpoint: String,
 }
 
-pub(crate) struct ProxyService {
+pub struct ProxyService {
     handle: Arc<Box<dyn Registry>>,
     runtime: Arc<Runtime>,
     router_matcher: Arc<Matcher>,
     // mcp-name -> tag(version) -> load-balancer
     server_cache: Arc<RwLock<HashMap<String, HashMap<String, McpServerInfo>>>>,
-    session_manager: Arc<Box<dyn session::Manager>>,
+    session_manager: Arc<Box<dyn Manager>>,
 }
 
 impl ProxyService {
@@ -53,7 +52,7 @@ impl ProxyService {
     }
 
     #[allow(dead_code)]
-    pub fn with_session_manager(&mut self, manager: Box<dyn session::Manager>) {
+    pub fn with_session_manager(&mut self, manager: Box<dyn Manager>) {
         self.session_manager = Arc::new(manager)
     }
 
@@ -170,7 +169,7 @@ impl ProxyService {
         None
     }
 
-    pub(crate) async fn build_context_from_connection(
+    pub async fn build_context_from_connection(
         &self,
         name: &str,
         tag: &str,
@@ -189,7 +188,7 @@ impl ProxyService {
         Ok(())
     }
 
-    pub(crate) async fn build_context_from_message(
+    pub async fn build_context_from_message(
         &self,
         session_id: &str,
         ctx: &mut ProxyContext,
@@ -392,7 +391,7 @@ impl ProxyHttp for ProxyService {
     }
 }
 
-pub(crate) struct ProxyContext {
+pub struct ProxyContext {
     scheme: String,
     endpoint: String,
     host: String,
