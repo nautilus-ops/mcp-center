@@ -23,3 +23,6 @@ serde = { version = "1.0.219", features = ["derive"] }
 toml = "0.9.4"
 cached = "0.56.0"
 regex = "1.11.1"
+
+[dev-dependencies]
+assert2 = "0.3.16"

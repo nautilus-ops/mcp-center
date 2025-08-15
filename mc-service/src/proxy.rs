@@ -1,6 +1,11 @@
+use crate::config::AppConfig;
+use crate::router::{Matcher, Router};
+use crate::session::manager::LocalManager;
+use crate::session::{Manager, SessionInfo};
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::Uri;
+use mc_register::Registry;
 use pingora_core::prelude::HttpPeer;
 use pingora_core::{ErrorType, InternalError};
 use pingora_http::{RequestHeader, ResponseHeader};
@@ -16,11 +21,6 @@ use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::interval;
-use mc_register::Registry;
-use crate::config::AppConfig;
-use crate::router::{Matcher, Router};
-use crate::session::{Manager, SessionInfo};
-use crate::session::manager::LocalManager;
 
 struct McpServerInfo {
     lb: LoadBalancer<RoundRobin>,
@@ -190,6 +190,8 @@ impl ProxyService {
 
     pub async fn build_context_from_message(
         &self,
+        name: &str,
+        tag: &str,
         session_id: &str,
         ctx: &mut ProxyContext,
     ) -> pingora_core::Result<()> {
@@ -289,16 +291,29 @@ impl ProxyHttp for ProxyService {
             session.req_header().uri
         );
 
-        let router = self.router_matcher.matching(session)?;
+        let router = self
+            .router_matcher
+            .matching(session.req_header().uri.to_string())?;
 
         match router {
-            Router::ConnectRouter(name, tag) => {
+            Router::ConnectRouter { name, tag } => {
                 self.build_context_from_connection(name.as_str(), tag.as_str(), ctx)
                     .await?;
                 Ok(false)
             }
-            Router::MessageRouter(session_id) => {
-                self.build_context_from_message(&session_id, ctx).await?;
+            Router::MessageRouter {
+                name,
+                tag,
+                message_path,
+                session_id,
+            } => {
+                self.build_context_from_message(
+                    name.as_str(),
+                    tag.as_str(),
+                    session_id.as_str(),
+                    ctx,
+                )
+                .await?;
                 Ok(false)
             }
         }
