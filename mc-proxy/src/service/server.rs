@@ -84,6 +84,10 @@ impl MainServer {
 }
 
 impl Application for MainServer {
+    fn new() -> Self {
+        Self::new()
+    }
+
     fn prepare(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         tracing::info!("Preparing Censor application with config: {}", path);
 

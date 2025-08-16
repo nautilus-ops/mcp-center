@@ -1,9 +1,9 @@
+use mc_booter::booter::Booter;
+use service::server::MainServer;
 use std::error::Error;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry;
 use tracing_subscriber::util::SubscriberInitExt;
-use mc_booter::booter::Booter;
-use service::server::MainServer;
 
 mod service;
 
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    if let Err(err) = Booter::run(MainServer::new()) {
+    if let Err(err) = Booter::run::<MainServer>() {
         tracing::error!("Failed to start application: {}", err);
     }
     Ok(())
