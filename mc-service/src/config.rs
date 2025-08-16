@@ -6,16 +6,12 @@ pub struct AppConfig {
     pub mcp_center: McpCenter,
     #[serde(default)]
     pub mcp_registry: McpRegistry,
-    #[serde(default)]
-    pub session_manager: SessionManager,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct McpCenter {
     #[serde(default)]
     pub http_port: u16,
-    #[serde(default)]
-    pub grpc_port: u16, // TODO support grpc
     #[serde(default)]
     pub cache_reflash_interval: u64,
 }
@@ -35,10 +31,4 @@ impl Default for McpRegistry {
             mcp_definition_path: "mcp_servers".to_string(),
         }
     }
-}
-
-#[derive(Deserialize, Debug, Clone, Default)]
-pub struct SessionManager {
-    #[serde(default)]
-    pub expiration: u64,
 }

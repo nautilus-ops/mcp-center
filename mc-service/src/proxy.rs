@@ -1,3 +1,8 @@
+use crate::config::AppConfig;
+use crate::router::{Matcher, Router};
+use mc_common::types::HttpScheme;
+use mc_register::Registry;
+
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::Uri;
@@ -16,11 +21,6 @@ use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::interval;
-use mc_register::Registry;
-use crate::config::AppConfig;
-use crate::router::{Matcher, Router};
-use crate::session::{Manager, SessionInfo};
-use crate::session::manager::LocalManager;
 
 struct McpServerInfo {
     lb: LoadBalancer<RoundRobin>,
@@ -33,7 +33,6 @@ pub struct ProxyService {
     router_matcher: Arc<Matcher>,
     // mcp-name -> tag(version) -> load-balancer
     server_cache: Arc<RwLock<HashMap<String, HashMap<String, McpServerInfo>>>>,
-    session_manager: Arc<Box<dyn Manager>>,
 }
 
 impl ProxyService {
@@ -43,17 +42,11 @@ impl ProxyService {
             runtime,
             router_matcher: Arc::new(Matcher::new()),
             server_cache: Arc::new(RwLock::new(HashMap::new())),
-            session_manager: Arc::new(Box::new(LocalManager::new(config.session_manager.clone()))),
         };
 
         service.async_cache(config.mcp_center.cache_reflash_interval);
 
         service
-    }
-
-    #[allow(dead_code)]
-    pub fn with_session_manager(&mut self, manager: Box<dyn Manager>) {
-        self.session_manager = Arc::new(manager)
     }
 
     pub fn async_cache(&self, cache_interval: u64) {
@@ -160,10 +153,10 @@ impl ProxyService {
         let cache = self.server_cache.read().await;
         if let Some(tags) = cache.get(mcp_name) {
             if let Some(info) = tags.get(tag) {
-                return match info.lb.select(b"", 256) {
-                    None => None,
-                    Some(backend) => Some((backend, info.endpoint.clone())),
-                };
+                return info
+                    .lb
+                    .select(b"", 256)
+                    .map(|backend| (backend, info.endpoint.clone()));
             }
         }
         None
@@ -178,9 +171,9 @@ impl ProxyService {
         let (backend, parsed) = self.load_mcp_info_from_cache(name, tag).await?;
 
         ctx.endpoint = parsed.endpoint.clone();
-        ctx.path = parsed.path.clone();
+        ctx.connect_path = parsed.path.clone();
         ctx.host = parsed.host.clone();
-        ctx.scheme = parsed.scheme.clone();
+        ctx.scheme = parsed.scheme;
         ctx.port = parsed.port.clone();
         ctx.backend = Some(backend);
         ctx.name = name.to_string();
@@ -190,28 +183,22 @@ impl ProxyService {
 
     pub async fn build_context_from_message(
         &self,
-        session_id: &str,
+        name: &str,
+        tag: &str,
+        message_path: &str,
         ctx: &mut ProxyContext,
     ) -> pingora_core::Result<()> {
-        let manager = self.session_manager.clone();
-        let info = manager.load(session_id).map_err(|e| {
-            tracing::error!("Can't load session {}: {}", session_id, e);
-            pingora_core::Error::explain(
-                InternalError,
-                format!("Can't load session {}: {}", session_id, e),
-            )
-        })?;
-
-        let (backend, parsed) = self.load_mcp_info_from_cache(&info.name, &info.tag).await?;
+        let (backend, parsed) = self.load_mcp_info_from_cache(name, tag).await?;
 
         ctx.endpoint = parsed.endpoint.clone();
-        ctx.path = parsed.path.clone();
+        ctx.connect_path = parsed.path.clone();
         ctx.host = parsed.host.clone();
-        ctx.scheme = parsed.scheme.clone();
+        ctx.scheme = parsed.scheme;
         ctx.port = parsed.port.clone();
         ctx.backend = Some(backend);
-        ctx.name = info.name.clone();
-        ctx.tag = info.tag.clone();
+        ctx.name = name.to_string();
+        ctx.tag = tag.to_string();
+        ctx.message_path = message_path.to_string();
         Ok(())
     }
 
@@ -223,10 +210,10 @@ impl ProxyService {
         let (backend, endpoint) = match self.load_server_info(mcp_name, tag).await {
             Some(info) => info,
             None => {
-                tracing::error!("Can't load server {}, tag {}", mcp_name, tag);
+                tracing::error!("Can't load server {mcp_name}, tag {tag}");
                 return Err(pingora_core::Error::explain(
                     ErrorType::HTTPStatus(404),
-                    format!("Can't load server {}, tag {}", mcp_name, tag),
+                    format!("Can't load server {mcp_name}, tag {tag}"),
                 ));
             }
         };
@@ -234,10 +221,10 @@ impl ProxyService {
         let parsed = match parse_endpoint(endpoint.as_str()) {
             Ok(result) => result,
             Err(err) => {
-                tracing::error!("Can't parse endpoint {}, error: {}", endpoint, err);
+                tracing::error!("Can't parse endpoint {endpoint}, error: {err}");
                 return Err(pingora_core::Error::explain(
                     InternalError,
-                    format!("Can't parse endpoint {}, error: {}", endpoint, err),
+                    format!("Can't parse endpoint {endpoint}, error: {err}"),
                 ));
             }
         };
@@ -269,7 +256,7 @@ impl ProxyHttp for ProxyService {
 
         let mut proxy = HttpPeer::new(backend.clone(), false, String::from(""));
 
-        if ctx.scheme == "https" {
+        if ctx.scheme.is_https() {
             proxy = HttpPeer::new(backend.clone(), true, ctx.host.clone());
         }
         Ok(Box::from(proxy))
@@ -289,16 +276,29 @@ impl ProxyHttp for ProxyService {
             session.req_header().uri
         );
 
-        let router = self.router_matcher.matching(session)?;
+        let router = self
+            .router_matcher
+            .matching(session.req_header().uri.to_string())?;
 
         match router {
-            Router::ConnectRouter(name, tag) => {
+            Router::ConnectRouter { name, tag } => {
                 self.build_context_from_connection(name.as_str(), tag.as_str(), ctx)
                     .await?;
                 Ok(false)
             }
-            Router::MessageRouter(session_id) => {
-                self.build_context_from_message(&session_id, ctx).await?;
+            Router::MessageRouter {
+                name,
+                tag,
+                message_path,
+                ..
+            } => {
+                self.build_context_from_message(
+                    name.as_str(),
+                    tag.as_str(),
+                    message_path.as_str(),
+                    ctx,
+                )
+                .await?;
                 Ok(false)
             }
         }
@@ -313,17 +313,24 @@ impl ProxyHttp for ProxyService {
     where
         Self::CTX: Send + Sync,
     {
-        if ctx.scheme == "https" {
+        if ctx.scheme.is_https() {
             upstream_request.insert_header("Host", ctx.host.clone())?;
         }
 
-        // TODO Change to a more optimal logic to distinguish between /message and the initial connection.
-        let session_id = parse_message(session.req_header().uri.to_string().as_str());
-        if session_id != "" {
+        if let Some((_, session_id)) =
+            parse_message(session.req_header().uri.to_string().as_str())
+        {
+            let mut message_uri = ctx.message_path.clone();
+            message_uri.push_str("?sessionId=");
+            message_uri.push_str(session_id.as_str());
+
+            let uri = Uri::from_str(message_uri.as_str()).unwrap();
+
+            upstream_request.set_uri(uri);
             return Ok(());
         }
 
-        let uri = Uri::from_str(ctx.path.as_str()).unwrap();
+        let uri = Uri::from_str(ctx.connect_path.as_str()).unwrap();
         upstream_request.set_uri(uri);
         Ok(())
     }
@@ -348,42 +355,27 @@ impl ProxyHttp for ProxyService {
         _end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> pingora_core::Result<()> {
-        if let Some(body) = body.clone() {
-            let content = String::from_utf8_lossy(body.as_ref());
-            tracing::debug!("upstream_response_body_filter {:?}", content);
+        if let Some(body_bytes) = body.clone() {
+            let content = String::from_utf8_lossy(body_bytes.as_ref());
+            tracing::info!("upstream_response_body_filter {:?}", content);
 
             let path = session.req_header().uri.path();
             if path.starts_with("/connect") || path == "/" {
-                let re = Regex::new(r"sessionId=([a-f0-9-]+)").unwrap();
-
-                if let Some(caps) = re.captures(&content) {
-                    let session_id = caps.get(1).map(|m| m.as_str()).unwrap();
+                if let Some((path, session_id)) = parse_message(content.to_string().as_str()) {
                     tracing::info!(
                         "connect mcp success sessionId={}, name={}, tag={}",
                         session_id,
                         ctx.name,
                         ctx.tag
                     );
+                    ctx.message_path = path;
 
-                    let manager = self.session_manager.clone();
-                    let name = ctx.name.clone();
-                    let tag = ctx.tag.clone();
-                    let scheme = ctx.scheme.clone();
-                    let host = ctx.host.clone();
-                    let sid = session_id.to_string().clone();
+                    let proxy_message_path = build_proxy_message_path(ctx, session_id.as_str());
+                    let mut proxy_body = String::from("event: endpoint\ndata: ");
+                    proxy_body.push_str(proxy_message_path.as_str());
+                    proxy_body.push_str("\r\n\r\n");
 
-                    // waiting session info save
-                    if let Err(err) = manager.save(
-                        &sid,
-                        SessionInfo {
-                            name,
-                            tag,
-                            scheme,
-                            host,
-                        },
-                    ) {
-                        tracing::error!("error while saving session: {}", err);
-                    }
+                    *body = Some(Bytes::from(proxy_body));
                 }
             }
         }
@@ -392,27 +384,29 @@ impl ProxyHttp for ProxyService {
 }
 
 pub struct ProxyContext {
-    scheme: String,
+    scheme: HttpScheme,
     endpoint: String,
     host: String,
     port: String,
-    path: String,
+    connect_path: String,
     backend: Option<Backend>,
     name: String,
     tag: String,
+    message_path: String,
 }
 
 impl ProxyContext {
     pub fn new() -> Self {
         Self {
-            scheme: String::from("https"),
+            scheme: HttpScheme::Http,
             endpoint: String::from(""),
             host: String::from(""),
             port: String::from(""),
-            path: String::from(""),
+            connect_path: String::from("/"),
             backend: None,
             name: String::from(""),
             tag: String::from(""),
+            message_path: String::from("/"),
         }
     }
 }
@@ -423,7 +417,7 @@ struct ParsedEndpoint {
     host: String,
     port: String,
     path: String,
-    scheme: String,
+    scheme: HttpScheme,
 }
 
 fn parse_endpoint(endpoint: &str) -> Result<ParsedEndpoint, Box<dyn Error>> {
@@ -450,23 +444,171 @@ fn parse_endpoint(endpoint: &str) -> Result<ParsedEndpoint, Box<dyn Error>> {
             host: host.to_string(),
             port: port.to_string(),
             path: path.to_string(),
-            scheme: scheme.to_string(),
+            scheme: HttpScheme::from_str(scheme)?,
         })
     } else {
-        Err(format!("Failed to parse endpoint {}", endpoint).into())
+        Err(format!("Failed to parse endpoint {endpoint}").into())
     }
 }
 
-fn parse_message(uri: &str) -> String {
-    let re = Regex::new(r"^/message\?sessionId=([0-9a-fA-F\-]+)$").unwrap();
-
-    if let Some(id) = re
-        .captures(uri)
-        .and_then(|caps| caps.get(1))
-        .map(|m| m.as_str().to_string())
-    {
-        return id.clone();
+fn parse_message(input: &str) -> Option<(String, String)> {
+    let uri = if let Some(line) = input.lines().find(|l| l.trim_start().starts_with("data:")) {
+        line.trim_start_matches("data:").trim()
+    } else {
+        input.trim()
     };
 
-    "".to_owned()
+    let re = Regex::new(r"^(?P<path>[^?]+)\?sessionId=(?P<sid>[0-9a-fA-F\-]+)").unwrap();
+
+    re.captures(uri)
+        .map(|caps| (caps["path"].to_string(), caps["sid"].to_string()))
+}
+
+fn build_proxy_message_path(ctx: &mut ProxyContext, session_id: &str) -> String {
+    let raw_message_path = ctx.message_path.trim_start_matches("/");
+
+    let mut proxy_message_path = String::from("/message/");
+    proxy_message_path.push_str(ctx.name.as_str());
+    proxy_message_path.push('/');
+    proxy_message_path.push_str(ctx.tag.as_str());
+    proxy_message_path.push('/');
+    proxy_message_path.push_str(raw_message_path);
+    proxy_message_path.push_str("?sessionId=");
+    proxy_message_path.push_str(session_id);
+
+    proxy_message_path
+}
+
+#[cfg(test)]
+mod test {
+    use crate::proxy::{ProxyContext, build_proxy_message_path, parse_message};
+    use mc_common::types::HttpScheme;
+
+    #[test]
+    fn test_parse_message() {
+        #[derive(Debug)]
+        struct TestCase {
+            input: &'static str,
+            path_want: &'static str,
+            id_want: &'static str,
+        }
+        let tests = vec![
+            TestCase {
+                input: "/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+                path_want: "/message",
+                id_want: "49b420bb-adc1-4231-917a-08822da1e8f3",
+            },
+            TestCase {
+                input: "/sse/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+                path_want: "/sse/message",
+                id_want: "49b420bb-adc1-4231-917a-08822da1e8f3",
+            },
+            TestCase {
+                input: "/api/sse/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+                path_want: "/api/sse/message",
+                id_want: "49b420bb-adc1-4231-917a-08822da1e8f3",
+            },
+            TestCase {
+                input: "event: endpoint\ndata: /message?sessionId=2e029713-f2e5-41db-bdb7-a9255efaa586\r\n\r\n",
+                path_want: "/message",
+                id_want: "2e029713-f2e5-41db-bdb7-a9255efaa586",
+            },
+            TestCase {
+                input: "event: endpoint\ndata: /api/message?sessionId=2e029713-f2e5-41db-bdb7-a9255efaa586\r\n\r\n",
+                path_want: "/api/message",
+                id_want: "2e029713-f2e5-41db-bdb7-a9255efaa586",
+            },
+            TestCase {
+                input: "event: endpoint\ndata: /api/sse/message?sessionId=2e029713-f2e5-41db-bdb7-a9255efaa586\r\n\r\n",
+                path_want: "/api/sse/message",
+                id_want: "2e029713-f2e5-41db-bdb7-a9255efaa586",
+            },
+        ];
+
+        for t in tests {
+            match parse_message(t.input) {
+                None => {
+                    panic!("Failed to parse sessionId and path for input: {}", t.input);
+                }
+                Some((path, id)) => {
+                    assert_eq!(
+                        path, t.path_want,
+                        "message_path mismatch: got {}, want {}",
+                        path, t.path_want
+                    );
+                    assert_eq!(
+                        id, t.id_want,
+                        "session_id mismatch: got {}, want {}",
+                        id, t.id_want
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_build_proxy_message_path() {
+        let tests = vec![
+            (
+                ProxyContext {
+                    scheme: HttpScheme::Http,
+                    endpoint: "".to_string(),
+                    host: "".to_string(),
+                    port: "".to_string(),
+                    connect_path: "".to_string(),
+                    backend: None,
+                    name: "fetch".to_string(),
+                    tag: "1.0.0".to_string(),
+                    message_path: "/message".to_string(),
+                },
+                String::from("49b420bb-adc1-4231-917a-08822da1e8f3"),
+                String::from(
+                    "/message/fetch/1.0.0/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+                ),
+            ),
+            (
+                ProxyContext {
+                    scheme: HttpScheme::Http,
+                    endpoint: "".to_string(),
+                    host: "".to_string(),
+                    port: "".to_string(),
+                    connect_path: "".to_string(),
+                    backend: None,
+                    name: "fetch".to_string(),
+                    tag: "1.0.0".to_string(),
+                    message_path: "/sse/message".to_string(),
+                },
+                String::from("49b420bb-adc1-4231-917a-08822da1e8f3"),
+                String::from(
+                    "/message/fetch/1.0.0/sse/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+                ),
+            ),
+            (
+                ProxyContext {
+                    scheme: HttpScheme::Http,
+                    endpoint: "".to_string(),
+                    host: "".to_string(),
+                    port: "".to_string(),
+                    connect_path: "".to_string(),
+                    backend: None,
+                    name: "fetch".to_string(),
+                    tag: "1.0.0".to_string(),
+                    message_path: "api/sse/message".to_string(),
+                },
+                String::from("49b420bb-adc1-4231-917a-08822da1e8f3"),
+                String::from(
+                    "/message/fetch/1.0.0/api/sse/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+                ),
+            ),
+        ];
+
+        for (mut ctx, session_id, want) in tests {
+            let proxy_message_path = build_proxy_message_path(&mut ctx, &session_id);
+            assert_eq!(
+                want, proxy_message_path,
+                "message_path mismatch: got {}, want {}",
+                proxy_message_path, want
+            );
+        }
+    }
 }

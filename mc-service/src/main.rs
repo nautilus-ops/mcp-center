@@ -5,7 +5,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 use mc_booter::booter::Booter;
 use crate::server::MainServer;
 
-mod session;
 mod config;
 mod proxy;
 mod server;
