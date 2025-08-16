@@ -1,12 +1,12 @@
-CONFIG ?= "bootstrap.toml"
 LOG_LEVEL ?= "info"
 IMAGE_REGISTER ?= ""
 PLATFORM ?= linux/amd64,linux/arm64
 RELEASE ?= false
+MODEL ?=
+CONFIG ?= "config/$(MODEL)/bootstrap.toml"
 
 start-local:
-	@RUST_LOG=$(LOG_LEVEL) cargo run -p mc-proxy -- run --config $(CONFIG)
-
+	@RUST_LOG=$(LOG_LEVEL) cargo run -p $(MODEL) -- run --config $(CONFIG)
 
 # Build local Docker image
 build-image:

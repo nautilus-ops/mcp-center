@@ -1,0 +1,2 @@
+[mcp_registry]
+http_port = "${HTTP_PORT:5433}"
