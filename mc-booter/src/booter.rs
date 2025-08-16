@@ -28,7 +28,9 @@ pub enum Commands {
 pub struct Booter;
 
 impl Booter {
-    pub fn run<T: Application>(mut application: T) -> Result<(), Box<dyn Error>> {
+    pub fn run<T: Application>() -> Result<(), Box<dyn Error>> {
+        let mut application = T::new();
+        
         let cli = Cli::parse();
 
         let mut filepath = String::new();

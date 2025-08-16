@@ -1,4 +1,4 @@
-[mcp_center]
+[mcp_proxy]
 http_port = "${HTTP_PORT:5432}"
 cache_reflash_interval = "${CACHE_REFLASH_INTERVAL:3600}"   # Default one hour
 

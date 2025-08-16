@@ -18,10 +18,10 @@ COPY Cargo.toml Cargo.lock ./
 
 COPY mc-booter ./mc-booter
 COPY mc-common ./mc-common
-COPY mc-register ./mc-register
-COPY mc-service ./mc-service
+COPY mc-loader ./mc-register
+COPY mc-proxy ./mc-service
 
-RUN cargo build -p mc-service --release
+RUN cargo build -p mc-proxy --release
 
 FROM debian:bookworm-slim
 

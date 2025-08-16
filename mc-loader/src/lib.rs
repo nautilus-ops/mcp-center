@@ -2,7 +2,7 @@ use std::error::Error;
 use serde::Deserialize;
 
 pub mod external_api;
-pub mod self_manager;
+pub mod local;
 
 #[derive(Default, Debug, Deserialize, Clone)]
 pub struct McpServer {

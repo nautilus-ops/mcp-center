@@ -1,9 +1,9 @@
-use crate::config::{AppConfig, McpRegistry};
-use crate::proxy;
+use crate::service::config::{AppConfig, McpRegistry};
+use crate::service::proxy;
 use mc_booter::app::application::Application;
 use mc_common::utils;
-use mc_register::external_api::ExternalApiHandler;
-use mc_register::self_manager::SelfManagerRegistry;
+use mc_loader::external_api::ExternalApiHandler;
+use mc_loader::local::LocalRegistry;
 use async_trait::async_trait;
 use pingora_core::prelude::Server;
 use pingora_core::server::{RunArgs, ShutdownSignal, ShutdownSignalWatch};
@@ -56,8 +56,8 @@ impl MainServer {
 
         server.bootstrap();
 
-        let handler: Box<dyn mc_register::Registry> = match &self.bootstrap.registry {
-            Registry::Memory(path) => Box::new(SelfManagerRegistry::new(path.clone())),
+        let handler: Box<dyn mc_loader::Registry> = match &self.bootstrap.registry {
+            Registry::Memory(path) => Box::new(LocalRegistry::new(path.clone())),
             Registry::ExternalAPI(config) => Box::new(ExternalApiHandler::new(
                 config.url.as_str(),
                 config.authorization.clone(),
@@ -84,6 +84,10 @@ impl MainServer {
 }
 
 impl Application for MainServer {
+    fn new() -> Self {
+        Self::new()
+    }
+
     fn prepare(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         tracing::info!("Preparing Censor application with config: {}", path);
 
@@ -103,7 +107,7 @@ impl Application for MainServer {
 
         self.config = config.clone();
 
-        self.bootstrap.port = config.mcp_center.http_port;
+        self.bootstrap.port = config.mcp_proxy.http_port;
 
         self.bootstrap.registry = match config.mcp_registry {
             McpRegistry::LocalMemory {

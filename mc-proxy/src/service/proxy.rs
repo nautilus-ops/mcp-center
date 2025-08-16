@@ -1,7 +1,7 @@
-use crate::config::AppConfig;
-use crate::router::{Matcher, Router};
+use crate::service::config::AppConfig;
+use crate::service::router::{Matcher, Router};
 use mc_common::types::HttpScheme;
-use mc_register::Registry;
+use mc_loader::Registry;
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -44,7 +44,7 @@ impl ProxyService {
             server_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
-        service.async_cache(config.mcp_center.cache_reflash_interval);
+        service.async_cache(config.mcp_proxy.cache_reflash_interval);
 
         service
     }
@@ -481,7 +481,7 @@ fn build_proxy_message_path(ctx: &mut ProxyContext, session_id: &str) -> String 
 
 #[cfg(test)]
 mod test {
-    use crate::proxy::{ProxyContext, build_proxy_message_path, parse_message};
+    use crate::service::proxy::{ProxyContext, build_proxy_message_path, parse_message};
     use mc_common::types::HttpScheme;
 
     #[test]
