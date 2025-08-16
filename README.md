@@ -8,6 +8,17 @@
 
 A centralized platform for managing and connecting [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) servers. MCP Center provides a high-performance proxy service that enables seamless communication between MCP clients and multiple MCP servers.
 
+## Motivation
+
+In our Kubernetes cluster, we have deployed various MCP Servers, including both in-house and third-party implementations, each running as independent services. Accessing these services currently requires configuring separate `K8s Ingress` or `Service Gateway` for each MCP Server, which increases operational complexity and maintenance overhead.
+
+To address this, we propose a centralized MCP registry and reverse-proxy service. With this centralized service:
+* Service discovery becomes unified, eliminating the need to configure access paths for each MCP Server individually.
+* Authentication can be managed consistently across all MCP Servers, enhancing system security.
+* Leveraging a plugin system, we can modify or filter MCP Tool parameters, enabling tool-level traceability and monitoring (see issue #7).
+
+This approach improves maintainability and provides a foundation for future features such as unified tracing, auditing, and monitoring.
+
 ## Features
 
 - [x] **MCP SSE Transport Proxy** - Server-Sent Events transport support
