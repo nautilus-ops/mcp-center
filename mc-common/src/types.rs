@@ -1,6 +1,4 @@
-use core::fmt;
 use std::cmp::PartialEq;
-use std::fmt::Display;
 use std::str::FromStr;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -15,7 +13,7 @@ impl FromStr for HttpScheme {
         match s.to_lowercase().as_str() {
             "http" => Ok(HttpScheme::Http),
             "https" => Ok(HttpScheme::Https),
-            _ => Err(format!("Unknown scheme: {}", s)),
+            _ => Err(format!("Unknown scheme: {s}")),
         }
     }
 }

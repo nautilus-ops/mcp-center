@@ -10,7 +10,6 @@ pub enum Router {
         name: String,
         tag: String,
         message_path: String,
-        session_id: String,
     },
 }
 
@@ -45,13 +44,12 @@ impl Matcher {
                     // /message
                     'm' => {
                         return {
-                            let (name, tag, message_path, session_id) =
+                            let (name, tag, message_path, ..) =
                                 self.parse_message_router(uri.as_str())?;
                             Ok(Router::MessageRouter {
                                 name,
                                 tag,
                                 message_path,
-                                session_id,
                             })
                         };
                     }
@@ -113,11 +111,19 @@ fn test_connect_router() {
 
     for (case, want_name, want_tag) in cases {
         let router = matcher.matching(case.to_string()).unwrap();
-        
+
         match router {
             Router::ConnectRouter { name, tag } => {
-                assert_eq!(name, want_name, "name mismatch: got {}, want {}", name, want_name);
-                assert_eq!(tag, want_tag, "tag mismatch: got {}, want {}", tag, want_tag);
+                assert_eq!(
+                    name, want_name,
+                    "name mismatch: got {}, want {}",
+                    name, want_name
+                );
+                assert_eq!(
+                    tag, want_tag,
+                    "tag mismatch: got {}, want {}",
+                    tag, want_tag
+                );
             }
             _ => panic!("Expected ConnectRouter, got different router type"),
         }
@@ -128,7 +134,7 @@ fn test_connect_router() {
 fn test_root_path() {
     let matcher = Matcher::new();
     let router = matcher.matching("/".to_string()).unwrap();
-    
+
     match router {
         Router::ConnectRouter { name, tag } => {
             assert_eq!(name, "", "name should be empty for root path, got {}", name);
@@ -159,28 +165,43 @@ fn test_invalid_paths() {
 #[test]
 fn test_parse_connection_router() {
     let matcher = Matcher::new();
-    
-    let (name, tag) = matcher.parse_connection_router("/connect/foo/1.0.0").unwrap();
+
+    let (name, tag) = matcher
+        .parse_connection_router("/connect/foo/1.0.0")
+        .unwrap();
     assert_eq!(name, "foo", "name mismatch: got {}, want foo", name);
     assert_eq!(tag, "1.0.0", "tag mismatch: got {}, want 1.0.0", tag);
-    
+
     let result = matcher.parse_connection_router("/invalid/path");
-    assert!(result.is_err(), "Expected error for invalid connection path");
+    assert!(
+        result.is_err(),
+        "Expected error for invalid connection path"
+    );
 }
 
 #[test]
 fn test_parse_message_router() {
     let matcher = Matcher::new();
-    
+
     let (name, tag, message_path, session_id) = matcher
-        .parse_message_router("/message/foo/1.0.0/api/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3")
+        .parse_message_router(
+            "/message/foo/1.0.0/api/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+        )
         .unwrap();
-    
+
     assert_eq!(name, "foo", "name mismatch: got {}, want foo", name);
     assert_eq!(tag, "1.0.0", "tag mismatch: got {}, want 1.0.0", tag);
-    assert_eq!(message_path, "/api/message", "message_path mismatch: got {}, want /api/message", message_path);
-    assert_eq!(session_id, "49b420bb-adc1-4231-917a-08822da1e8f3", "session_id mismatch: got {}, want 49b420bb-adc1-4231-917a-08822da1e8f3", session_id);
-    
+    assert_eq!(
+        message_path, "/api/message",
+        "message_path mismatch: got {}, want /api/message",
+        message_path
+    );
+    assert_eq!(
+        session_id, "49b420bb-adc1-4231-917a-08822da1e8f3",
+        "session_id mismatch: got {}, want 49b420bb-adc1-4231-917a-08822da1e8f3",
+        session_id
+    );
+
     let result = matcher.parse_message_router("/invalid/path");
     assert!(result.is_err(), "Expected error for invalid message path");
 }
@@ -190,21 +211,60 @@ fn test_message_path_regex() {
     let matcher = Matcher::new();
 
     let cases = vec![
-        ("/message/foo/1.0.0/api/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3", "foo", "1.0.0", "/api/message", "49b420bb-adc1-4231-917a-08822da1e8f3"),
-        ("/message/foo/1.0.0/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3", "foo", "1.0.0", "/message", "49b420bb-adc1-4231-917a-08822da1e8f3"),
-        ("/message/foo/1.0.0/api/sse/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3", "foo", "1.0.0", "/api/sse/message", "49b420bb-adc1-4231-917a-08822da1e8f3"),
-        ("/message/foo/1.0.0/anything?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3", "foo", "1.0.0", "/anything", "49b420bb-adc1-4231-917a-08822da1e8f3"),
+        (
+            "/message/foo/1.0.0/api/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+            "foo",
+            "1.0.0",
+            "/api/message",
+            "49b420bb-adc1-4231-917a-08822da1e8f3",
+        ),
+        (
+            "/message/foo/1.0.0/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+            "foo",
+            "1.0.0",
+            "/message",
+            "49b420bb-adc1-4231-917a-08822da1e8f3",
+        ),
+        (
+            "/message/foo/1.0.0/api/sse/message?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+            "foo",
+            "1.0.0",
+            "/api/sse/message",
+            "49b420bb-adc1-4231-917a-08822da1e8f3",
+        ),
+        (
+            "/message/foo/1.0.0/anything?sessionId=49b420bb-adc1-4231-917a-08822da1e8f3",
+            "foo",
+            "1.0.0",
+            "/anything",
+            "49b420bb-adc1-4231-917a-08822da1e8f3",
+        ),
     ];
 
     for (case, want_name, want_tag, want_message_path, want_session_id) in cases {
         let router = matcher.matching(case.to_string()).unwrap();
-        
+
         match router {
-            Router::MessageRouter { name, tag, message_path, session_id } => {
-                assert_eq!(name, want_name, "name mismatch: got {}, want {}", name, want_name);
-                assert_eq!(tag, want_tag, "tag mismatch: got {}, want {}", tag, want_tag);
-                assert_eq!(message_path, want_message_path, "message_path mismatch: got {}, want {}", message_path, want_message_path);
-                assert_eq!(session_id, want_session_id, "session_id mismatch: got {}, want {}", session_id, want_session_id);
+            Router::MessageRouter {
+                name,
+                tag,
+                message_path,
+            } => {
+                assert_eq!(
+                    name, want_name,
+                    "name mismatch: got {}, want {}",
+                    name, want_name
+                );
+                assert_eq!(
+                    tag, want_tag,
+                    "tag mismatch: got {}, want {}",
+                    tag, want_tag
+                );
+                assert_eq!(
+                    message_path, want_message_path,
+                    "message_path mismatch: got {}, want {}",
+                    message_path, want_message_path
+                );
             }
             _ => panic!("Expected MessageRouter, got different router type"),
         }

@@ -13,9 +13,9 @@ pub fn replace_env_variables(input: String) -> String {
         if val.parse::<f64>().is_ok() {
             val
         } else if val == "true" || val == "false" {
-            format!("{}", val)
+            val.to_string()
         } else {
-            format!("\"{}\"", val)
+            format!("\"{val}\"")
         }
     })
     .into_owned()

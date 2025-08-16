@@ -21,7 +21,6 @@ use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::interval;
-use url::Url;
 
 struct McpServerInfo {
     lb: LoadBalancer<RoundRobin>,
@@ -154,10 +153,10 @@ impl ProxyService {
         let cache = self.server_cache.read().await;
         if let Some(tags) = cache.get(mcp_name) {
             if let Some(info) = tags.get(tag) {
-                return match info.lb.select(b"", 256) {
-                    None => None,
-                    Some(backend) => Some((backend, info.endpoint.clone())),
-                };
+                return info
+                    .lb
+                    .select(b"", 256)
+                    .map(|backend| (backend, info.endpoint.clone()));
             }
         }
         None
@@ -174,7 +173,7 @@ impl ProxyService {
         ctx.endpoint = parsed.endpoint.clone();
         ctx.connect_path = parsed.path.clone();
         ctx.host = parsed.host.clone();
-        ctx.scheme = parsed.scheme.clone();
+        ctx.scheme = parsed.scheme;
         ctx.port = parsed.port.clone();
         ctx.backend = Some(backend);
         ctx.name = name.to_string();
@@ -194,7 +193,7 @@ impl ProxyService {
         ctx.endpoint = parsed.endpoint.clone();
         ctx.connect_path = parsed.path.clone();
         ctx.host = parsed.host.clone();
-        ctx.scheme = parsed.scheme.clone();
+        ctx.scheme = parsed.scheme;
         ctx.port = parsed.port.clone();
         ctx.backend = Some(backend);
         ctx.name = name.to_string();
@@ -211,10 +210,10 @@ impl ProxyService {
         let (backend, endpoint) = match self.load_server_info(mcp_name, tag).await {
             Some(info) => info,
             None => {
-                tracing::error!("Can't load server {}, tag {}", mcp_name, tag);
+                tracing::error!("Can't load server {mcp_name}, tag {tag}");
                 return Err(pingora_core::Error::explain(
                     ErrorType::HTTPStatus(404),
-                    format!("Can't load server {}, tag {}", mcp_name, tag),
+                    format!("Can't load server {mcp_name}, tag {tag}"),
                 ));
             }
         };
@@ -222,10 +221,10 @@ impl ProxyService {
         let parsed = match parse_endpoint(endpoint.as_str()) {
             Ok(result) => result,
             Err(err) => {
-                tracing::error!("Can't parse endpoint {}, error: {}", endpoint, err);
+                tracing::error!("Can't parse endpoint {endpoint}, error: {err}");
                 return Err(pingora_core::Error::explain(
                     InternalError,
-                    format!("Can't parse endpoint {}, error: {}", endpoint, err),
+                    format!("Can't parse endpoint {endpoint}, error: {err}"),
                 ));
             }
         };
@@ -318,7 +317,7 @@ impl ProxyHttp for ProxyService {
             upstream_request.insert_header("Host", ctx.host.clone())?;
         }
 
-        if let Some((message_path, session_id)) =
+        if let Some((_, session_id)) =
             parse_message(session.req_header().uri.to_string().as_str())
         {
             let mut message_uri = ctx.message_path.clone();
@@ -448,7 +447,7 @@ fn parse_endpoint(endpoint: &str) -> Result<ParsedEndpoint, Box<dyn Error>> {
             scheme: HttpScheme::from_str(scheme)?,
         })
     } else {
-        Err(format!("Failed to parse endpoint {}", endpoint).into())
+        Err(format!("Failed to parse endpoint {endpoint}").into())
     }
 }
 
