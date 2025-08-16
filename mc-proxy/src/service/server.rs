@@ -107,7 +107,7 @@ impl Application for MainServer {
 
         self.config = config.clone();
 
-        self.bootstrap.port = config.mcp_center.http_port;
+        self.bootstrap.port = config.mcp_proxy.http_port;
 
         self.bootstrap.registry = match config.mcp_registry {
             McpRegistry::LocalMemory {

@@ -44,7 +44,7 @@ impl ProxyService {
             server_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
-        service.async_cache(config.mcp_center.cache_reflash_interval);
+        service.async_cache(config.mcp_proxy.cache_reflash_interval);
 
         service
     }

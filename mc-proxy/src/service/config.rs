@@ -3,13 +3,13 @@ use serde::Deserialize;
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct AppConfig {
     #[serde(default)]
-    pub mcp_center: McpCenter,
+    pub mcp_proxy: McpProxy,
     #[serde(default)]
     pub mcp_registry: McpRegistry,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
-pub struct McpCenter {
+pub struct McpProxy {
     #[serde(default)]
     pub http_port: u16,
     #[serde(default)]
