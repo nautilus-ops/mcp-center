@@ -1,9 +1,6 @@
 use pingora_core::{HTTPStatus, InternalError};
 use regex::Regex;
 
-#[cfg(test)]
-use assert2::assert;
-
 pub enum Router {
     ConnectRouter {
         name: String,
