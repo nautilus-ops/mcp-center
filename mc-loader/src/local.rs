@@ -9,11 +9,11 @@ struct McpServers {
 }
 
 #[derive(Debug, Default)]
-pub struct SelfManagerRegistry {
+pub struct LocalRegistry {
     mcp_servers: Vec<McpServer>,
 }
 
-impl SelfManagerRegistry {
+impl LocalRegistry {
     pub fn new(path: String) -> Self {
         let mut registry = Self {
             mcp_servers: Vec::new(),
@@ -25,7 +25,7 @@ impl SelfManagerRegistry {
 }
 
 #[async_trait::async_trait]
-impl Registry for SelfManagerRegistry {
+impl Registry for LocalRegistry {
     async fn list_mcp(&self) -> Result<Vec<McpServer>, Box<dyn Error>> {
         Ok(self.mcp_servers.clone())
     }

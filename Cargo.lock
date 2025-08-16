@@ -1324,7 +1324,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mc-register"
+name = "mc-loader"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -1336,7 +1336,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mc-service"
+name = "mc-proxy"
 version = "0.1.0"
 dependencies = [
  "assert2",
@@ -1346,7 +1346,7 @@ dependencies = [
  "http",
  "mc-booter",
  "mc-common",
- "mc-register",
+ "mc-loader",
  "pingora-core",
  "pingora-http",
  "pingora-load-balancing",

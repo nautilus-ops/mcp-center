@@ -1,12 +1,12 @@
 [package]
-name = "mc-service"
+name = "mc-proxy"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 mc-booter = {path = "../mc-booter"}
 mc-common = {path = "../mc-common"}
-mc-register = {path = "../mc-register"}
+mc-loader = {path = "../mc-loader" }
 
 async-trait = "0.1.88"
 pingora-core = { version = "0.5.0", features = ["openssl"] }

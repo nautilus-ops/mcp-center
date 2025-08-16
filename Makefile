@@ -5,7 +5,7 @@ PLATFORM ?= linux/amd64,linux/arm64
 RELEASE ?= false
 
 start-local:
-	@RUST_LOG=$(LOG_LEVEL) cargo run -p mc-service -- run --config $(CONFIG)
+	@RUST_LOG=$(LOG_LEVEL) cargo run -p mc-proxy -- run --config $(CONFIG)
 
 
 # Build local Docker image

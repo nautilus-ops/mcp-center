@@ -3,12 +3,9 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry;
 use tracing_subscriber::util::SubscriberInitExt;
 use mc_booter::booter::Booter;
-use crate::server::MainServer;
+use service::server::MainServer;
 
-mod config;
-mod proxy;
-mod server;
-mod router;
+mod service;
 
 fn main() -> Result<(), Box<dyn Error>> {
     registry()
