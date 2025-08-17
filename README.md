@@ -19,6 +19,9 @@ To address this, we propose a centralized MCP registry and reverse-proxy service
 
 This approach improves maintainability and provides a foundation for future features such as unified tracing, auditing, and monitoring.
 
+## Architecture
+![architecture_diagram.png](./docs/assets/architecture_diagram.png)
+
 ## Features
 
 - [x] **MCP SSE Transport Proxy** - Server-Sent Events transport support
