@@ -1,7 +1,5 @@
 # MCP Center
 
----
-
 ![MacOS](https://img.shields.io/badge/-Kubernetes-black?&logo=kubernetes&logoColor=white)
 ![Rust](https://img.shields.io/badge/-Rust-black?logo=rust&logoColor=white)
 ![MCP](https://img.shields.io/badge/-MCP-black?logo=modelcontextprotocol&logoColor=white)
@@ -12,12 +10,15 @@ A centralized platform for managing and connecting [MCP](https://modelcontextpro
 
 In our Kubernetes cluster, we have deployed various MCP Servers, including both in-house and third-party implementations, each running as independent services. Accessing these services currently requires configuring separate `K8s Ingress` or `Service Gateway` for each MCP Server, which increases operational complexity and maintenance overhead.
 
-To address this, we propose a centralized MCP registry and reverse-proxy service. With this centralized service:
-* Service discovery becomes unified, eliminating the need to configure access paths for each MCP Server individually.
-* Authentication can be managed consistently across all MCP Servers, enhancing system security.
-* Leveraging a plugin system, we can modify or filter MCP Tool parameters, enabling tool-level traceability and monitoring (see issue #7).
+To address this, we propose a centralized MCP registry and reverse-proxy service that enables managed hosting of MCP Servers, which can be deployed either on `Docker` or `Kubernetes`. With this centralized service:
 
-This approach improves maintainability and provides a foundation for future features such as unified tracing, auditing, and monitoring.
+* **Service discovery** becomes unified, eliminating the need to configure access paths for each MCP Server individually.
+* **Authentication** can be managed consistently across all MCP Servers, enhancing system security.
+* **Leveraging a plugin system**, we can modify or filter MCP Tool parameters, enabling tool-level traceability and monitoring (see issue [#7](https://github.com/nautilus-ops/mcp-center/issues/7)).
+* **Lifecycle management** of MCP Servers can be standardized, simplifying deployment, scaling, and upgrades.
+
+This approach improves maintainability, provides a foundation for future features such as unified tracing, auditing, and monitoring, and allows organizations to easily manage and host MCP Servers across different environments.
+
 
 ## Architecture
 ![architecture_diagram.png](./docs/assets/architecture_diagram.png)
@@ -27,7 +28,6 @@ This approach improves maintainability and provides a foundation for future feat
 - [x] **MCP SSE Transport Proxy** - Server-Sent Events transport support
 - [x] **MCP Streamable Transport Proxy** - Streamable transport protocol support
 - [x] **Multiple Registry Types** - Support for memory-based and external API registries
-- [x] **Session Management** - Configurable session expiration and management for sse connection
 - [x] **High Performance** - Built with [Pingora](https://github.com/cloudflare/pingora) proxy framework for optimal performance
 - [x] **Kubernetes Ready** - Complete Helm chart for easy deployment
 
