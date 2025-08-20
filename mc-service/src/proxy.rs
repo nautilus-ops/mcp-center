@@ -271,7 +271,7 @@ impl ProxyHttp for ProxyService {
         Self::CTX: Send + Sync,
     {
         tracing::info!(
-            "Request filter method: {} uri： {}",
+            "Request filters method: {} uri： {}",
             session.req_header().method,
             session.req_header().uri
         );
@@ -412,12 +412,12 @@ impl ProxyContext {
 }
 
 #[derive(Debug, Clone)]
-struct ParsedEndpoint {
-    endpoint: String,
-    host: String,
-    port: String,
-    path: String,
-    scheme: HttpScheme,
+pub struct ParsedEndpoint {
+    pub(crate) endpoint: String,
+    pub(crate) host: String,
+    pub(crate) port: String,
+    pub(crate) path: String,
+    pub(crate) scheme: HttpScheme,
 }
 
 fn parse_endpoint(endpoint: &str) -> Result<ParsedEndpoint, Box<dyn Error>> {

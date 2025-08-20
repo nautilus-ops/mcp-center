@@ -3,12 +3,12 @@ use serde::Deserialize;
 use std::error::Error;
 use std::fs;
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone)]
 struct McpServers {
     mcp_servers: Vec<McpServer>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SelfManagerRegistry {
     mcp_servers: Vec<McpServer>,
 }

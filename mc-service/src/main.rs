@@ -9,6 +9,9 @@ mod config;
 mod proxy;
 mod server;
 mod router;
+mod cache;
+
+mod reverse_proxy;
 
 fn main() -> Result<(), Box<dyn Error>> {
     registry()

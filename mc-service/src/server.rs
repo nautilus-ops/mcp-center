@@ -1,17 +1,21 @@
+use crate::cache::mcp_servers::Cache;
 use crate::config::{AppConfig, McpRegistry};
-use crate::proxy;
+use async_trait::async_trait;
+use axum::Router;
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
 use mc_booter::app::application::Application;
 use mc_common::utils;
 use mc_register::external_api::ExternalApiHandler;
 use mc_register::self_manager::SelfManagerRegistry;
-use async_trait::async_trait;
-use pingora_core::prelude::Server;
-use pingora_core::server::{RunArgs, ShutdownSignal, ShutdownSignalWatch};
+use pingora_core::server::{ShutdownSignal, ShutdownSignalWatch};
 use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
+use crate::reverse_proxy::connection::ConnectionService;
 
 pub enum Registry {
     Memory(String),
@@ -52,10 +56,10 @@ impl MainServer {
         shutdown_signal: Box<dyn ShutdownSignalWatch>,
         rt: Runtime,
     ) -> Result<(), Box<dyn Error>> {
-        let mut server = Server::new(None).unwrap();
-
-        server.bootstrap();
-
+        // let mut server = Server::new(None).unwrap();
+        //
+        // server.bootstrap();
+        //
         let handler: Box<dyn mc_register::Registry> = match &self.bootstrap.registry {
             Registry::Memory(path) => Box::new(SelfManagerRegistry::new(path.clone())),
             Registry::ExternalAPI(config) => Box::new(ExternalApiHandler::new(
@@ -63,22 +67,46 @@ impl MainServer {
                 config.authorization.clone(),
             )),
         };
-
+        //
+        //
+        // let mut service = pingora_proxy::http_proxy_service_with_name(
+        //     &server.configuration,
+        //     proxy::ProxyService::new(handler, runtime.clone(), self.config.clone()),
+        //     "McpGateway",
+        // );
+        //
+        // tracing::info!("starting HTTP server on port {}", self.bootstrap.port);
+        // service.add_tcp(format!("0.0.0.0:{}", self.bootstrap.port).as_str());
+        //
+        // server.add_service(service);
+        //
+        // server.run(RunArgs { shutdown_signal });
         let runtime = Arc::new(rt);
 
-        let mut service = pingora_proxy::http_proxy_service_with_name(
-            &server.configuration,
-            proxy::ProxyService::new(handler, runtime.clone(), self.config.clone()),
-            "McpGateway",
-        );
+        let cache = Arc::new(Cache::new(Arc::new(handler), runtime.clone(), 100));
 
-        tracing::info!("starting HTTP server on port {}", self.bootstrap.port);
-        service.add_tcp(format!("0.0.0.0:{}", self.bootstrap.port).as_str());
+        let https = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .unwrap()
+            .https_or_http()
+            .enable_http1()
+            .build();
 
-        server.add_service(service);
+        let client = Arc::new(Client::builder(TokioExecutor::new()).build(https));
 
-        server.run(RunArgs { shutdown_signal });
+        // let service = ReverseProxyService::new(Arc::new(client)).with_filter(Arc::new(SseFilter::new()));
 
+        let service = ConnectionService::new(client, cache);
+
+        let app = Router::new().route_service("/connect/{name}/{tag}", service);
+
+        runtime.block_on(async move {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:4000")
+                .await
+                .unwrap();
+            println!("listening on {}", listener.local_addr().unwrap());
+            axum::serve(listener, app).await.unwrap();
+        });
         Ok(())
     }
 }

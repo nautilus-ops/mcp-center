@@ -3,7 +3,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::error::Error;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default,Clone)]
 pub struct ExternalApiHandler {
     url: String,
     authorization: Option<String>,
