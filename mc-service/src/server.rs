@@ -38,11 +38,11 @@ struct Bootstrap {
     pub registry: Registry,
 }
 
-pub struct MainServer {
+pub struct McpCenterServer {
     bootstrap: Bootstrap,
     config: AppConfig,
 }
-impl MainServer {
+impl McpCenterServer {
     pub fn new() -> Self {
         Self {
             bootstrap: Default::default(),
@@ -104,7 +104,11 @@ impl MainServer {
     }
 }
 
-impl Application for MainServer {
+impl Application for McpCenterServer {
+    fn new() -> Self {
+        Self::new()
+    }
+
     fn prepare(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         tracing::info!("Preparing Censor application with config: {}", path);
 

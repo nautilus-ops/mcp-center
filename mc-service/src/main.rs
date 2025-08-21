@@ -1,4 +1,4 @@
-use crate::server::MainServer;
+use crate::server::McpCenterServer;
 use mc_booter::booter::Booter;
 use std::error::Error;
 use tracing_subscriber::layer::SubscriberExt;
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    if let Err(err) = Booter::run(MainServer::new()) {
+    if let Err(err) = Booter::run::<McpCenterServer>() {
         tracing::error!("Failed to start application: {}", err);
     }
     Ok(())

@@ -3,6 +3,7 @@ use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
 
 pub trait Application: Send + Sync {
+    fn new() -> Self;
     fn prepare(&mut self, config: String) -> Result<(), Box<dyn Error>>;
 
     fn run(&mut self, shutdown: CancellationToken, rt: Runtime) -> Result<(), Box<dyn Error>>;
