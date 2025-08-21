@@ -10,6 +10,7 @@ mod config;
 mod server;
 
 mod reverse_proxy;
+mod db;
 
 fn main() -> Result<(), Box<dyn Error>> {
     registry()
