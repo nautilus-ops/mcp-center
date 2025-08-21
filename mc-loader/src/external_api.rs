@@ -1,15 +1,15 @@
-use crate::{McpServer, Registry};
+use crate::{McpServer, Loader};
 use reqwest::Client;
 use serde::Deserialize;
 use std::error::Error;
 
 #[derive(Debug, Default,Clone)]
-pub struct ExternalApiHandler {
+pub struct ExternalApiLoader {
     url: String,
     authorization: Option<String>,
 }
 
-impl ExternalApiHandler {
+impl ExternalApiLoader {
     pub fn new(url: &str, authorization: Option<String>) -> Self {
         Self {
             url: url.to_string(),
@@ -19,7 +19,7 @@ impl ExternalApiHandler {
 }
 
 #[async_trait::async_trait]
-impl Registry for ExternalApiHandler {
+impl Loader for ExternalApiLoader {
     async fn list_mcp(&self) -> Result<Vec<McpServer>, Box<dyn Error>> {
         let client = Client::new();
         let mut builder = client.get(self.url.as_str());

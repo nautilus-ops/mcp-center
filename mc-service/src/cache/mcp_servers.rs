@@ -1,6 +1,6 @@
 use mc_common::types::HttpScheme;
-use mc_register::Registry;
-use pingora_load_balancing::{Backend, LoadBalancer};
+use mc_loader::Loader;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
@@ -11,20 +11,28 @@ use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::interval;
 
-#[derive(Clone)]
-struct McpServerInfo {
+static REGEX_ENDPOINT: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^(?P<scheme>https?)://(?P<host>[^/:]+)(?::(?P<port>\d+))?(?P<path>/.*)?$").unwrap()
+});
+
+#[derive(Debug, Clone)]
+pub struct McpServerInfo {
     pub endpoint: String,
+    pub host: String,
+    pub port: String,
+    pub path: String,
+    pub scheme: HttpScheme,
 }
 
 #[derive(Clone)]
 pub struct Cache {
-    handle: Arc<Box<dyn Registry>>,
+    handle: Arc<Box<dyn Loader>>,
     server_cache: Arc<RwLock<HashMap<String, HashMap<String, McpServerInfo>>>>,
     runtime: Arc<Runtime>,
 }
 
 impl Cache {
-    pub fn new(handle: Arc<Box<dyn Registry>>, runtime: Arc<Runtime>, interval: u64) -> Self {
+    pub fn new(handle: Arc<Box<dyn Loader>>, runtime: Arc<Runtime>, interval: u64) -> Self {
         let cache = Self {
             handle,
             server_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -38,11 +46,6 @@ impl Cache {
         let handle = self.handle.clone();
 
         self.runtime.spawn(async move {
-            let endpoint_regex = Regex::new(
-                r"^(?P<scheme>https?)://(?P<host>[^/:]+)(?::(?P<port>\d+))?(?P<path>/.*)?$",
-            )
-            .unwrap();
-
             let mut ticker = interval(Duration::from_secs(cache_interval));
             loop {
                 ticker.tick().await;
@@ -68,55 +71,41 @@ impl Cache {
                     }
 
                     let mut item = HashMap::<String, McpServerInfo>::new();
-                    let result = match parse_endpoint(&endpoint_regex, server.endpoint.as_str()) {
-                        Ok(result) => result,
+
+                    let mcp_server = match parse_endpoint(server.endpoint.as_str()) {
+                        Ok(p) => p,
                         Err(err) => {
-                            tracing::error!(
-                                "Can't parse endpoint {}, error: {}",
-                                server.endpoint,
-                                err
-                            );
+                            tracing::error!("Failed to parse endpoint, error: {}", err);
                             return;
                         }
                     };
 
-                    let ep = format!("{}:{}", result.host, result.port);
-
-                    item.insert(
-                        tag.clone(),
-                        McpServerInfo {
-                            endpoint: server.endpoint.clone(),
-                        },
-                    );
+                    item.insert(tag.clone(), mcp_server);
                     mcps.insert(server.name.clone(), item);
 
                     tracing::info!(
                         "Load mcp server {}/{} success, endpoint: {}",
                         server.name,
                         tag,
-                        ep
+                        server.endpoint
                     );
                 });
             }
         });
     }
 
-    pub async fn load_server_info(&self, mcp_name: &str, tag: &str) -> Option<String> {
+    pub async fn load_server_info(&self, mcp_name: &str, tag: &str) -> Option<McpServerInfo> {
         let cache = self.server_cache.read().await;
         if let Some(tags) = cache.get(mcp_name) {
             if let Some(info) = tags.get(tag) {
-                return Some(info.endpoint.clone());
+                return Some(info.clone());
             }
         }
         None
     }
 }
-
-fn parse_endpoint(
-    endpoint_regex: &Regex,
-    endpoint: &str,
-) -> Result<crate::proxy::ParsedEndpoint, Box<dyn Error>> {
-    if let Some(caps) = endpoint_regex.captures(endpoint) {
+fn parse_endpoint(endpoint: &str) -> Result<McpServerInfo, Box<dyn Error>> {
+    if let Some(caps) = REGEX_ENDPOINT.captures(endpoint) {
         let scheme = caps.name("scheme").map(|m| m.as_str()).unwrap_or("");
         let host = caps.name("host").map(|m| m.as_str()).unwrap_or("");
         let port = match caps.name("port") {
@@ -130,7 +119,7 @@ fn parse_endpoint(
             },
         };
         let path = caps.name("path").map(|m| m.as_str()).unwrap_or("/");
-        Ok(crate::proxy::ParsedEndpoint {
+        Ok(McpServerInfo {
             endpoint: endpoint.to_string(),
             host: host.to_string(),
             port: port.to_string(),

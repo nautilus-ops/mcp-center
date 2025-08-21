@@ -2,7 +2,7 @@ use std::error::Error;
 use serde::Deserialize;
 
 pub mod external_api;
-pub mod self_manager;
+pub mod local;
 
 #[derive(Default, Debug, Deserialize, Clone)]
 pub struct McpServer {
@@ -15,6 +15,6 @@ pub struct McpServer {
 }
 
 #[async_trait::async_trait]
-pub trait Registry: Send + Sync {
+pub trait Loader: Send + Sync {
     async fn list_mcp(&self) -> Result<Vec<McpServer>, Box<dyn Error>>;
 }

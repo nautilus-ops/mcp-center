@@ -1,21 +1,20 @@
 use crate::cache::mcp_servers::Cache;
 use crate::config::{AppConfig, McpRegistry};
-use async_trait::async_trait;
+use crate::reverse_proxy::connection::ConnectionService;
+use crate::reverse_proxy::message::MessageService;
 use axum::Router;
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use mc_booter::app::application::Application;
 use mc_common::utils;
-use mc_register::external_api::ExternalApiHandler;
-use mc_register::self_manager::SelfManagerRegistry;
-use pingora_core::server::{ShutdownSignal, ShutdownSignalWatch};
 use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
-use crate::reverse_proxy::connection::ConnectionService;
+use mc_loader::external_api::ExternalApiLoader;
+use mc_loader::local::LocalFileLoader;
 
 pub enum Registry {
     Memory(String),
@@ -51,36 +50,15 @@ impl MainServer {
         }
     }
 
-    fn start(
-        &self,
-        shutdown_signal: Box<dyn ShutdownSignalWatch>,
-        rt: Runtime,
-    ) -> Result<(), Box<dyn Error>> {
-        // let mut server = Server::new(None).unwrap();
-        //
-        // server.bootstrap();
-        //
-        let handler: Box<dyn mc_register::Registry> = match &self.bootstrap.registry {
-            Registry::Memory(path) => Box::new(SelfManagerRegistry::new(path.clone())),
-            Registry::ExternalAPI(config) => Box::new(ExternalApiHandler::new(
+    fn start(&self, shutdown_signal: CancellationToken, rt: Runtime) -> Result<(), Box<dyn Error>> {
+        let handler: Box<dyn mc_loader::Loader> = match &self.bootstrap.registry {
+            Registry::Memory(path) => Box::new(LocalFileLoader::new(path.clone())),
+            Registry::ExternalAPI(config) => Box::new(ExternalApiLoader::new(
                 config.url.as_str(),
                 config.authorization.clone(),
             )),
         };
-        //
-        //
-        // let mut service = pingora_proxy::http_proxy_service_with_name(
-        //     &server.configuration,
-        //     proxy::ProxyService::new(handler, runtime.clone(), self.config.clone()),
-        //     "McpGateway",
-        // );
-        //
-        // tracing::info!("starting HTTP server on port {}", self.bootstrap.port);
-        // service.add_tcp(format!("0.0.0.0:{}", self.bootstrap.port).as_str());
-        //
-        // server.add_service(service);
-        //
-        // server.run(RunArgs { shutdown_signal });
+        
         let runtime = Arc::new(rt);
 
         let cache = Arc::new(Cache::new(Arc::new(handler), runtime.clone(), 100));
@@ -94,18 +72,33 @@ impl MainServer {
 
         let client = Arc::new(Client::builder(TokioExecutor::new()).build(https));
 
-        // let service = ReverseProxyService::new(Arc::new(client)).with_filter(Arc::new(SseFilter::new()));
-
-        let service = ConnectionService::new(client, cache);
-
-        let app = Router::new().route_service("/connect/{name}/{tag}", service);
+        let app = Router::new()
+            .route_service(
+                "/proxy/connect/{name}/{tag}",
+                ConnectionService::new(client.clone(), cache.clone()),
+            )
+            .route_service(
+                "/proxy/message/{name}/{tag}/{*subPath}",
+                MessageService::new(client.clone(), cache.clone()),
+            );
 
         runtime.block_on(async move {
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:4000")
+            let listener =
+                tokio::net::TcpListener::bind(format!("0.0.0.0:{}", self.bootstrap.port))
+                    .await
+                    .unwrap();
+
+            let shutdown_signal = || async move {
+                shutdown_signal.cancelled().await;
+                tracing::info!("Shutting down...");
+            };
+
+            tracing::info!("starting HTTP server on port {}", self.bootstrap.port);
+
+            axum::serve(listener, app)
+                .with_graceful_shutdown(shutdown_signal())
                 .await
                 .unwrap();
-            println!("listening on {}", listener.local_addr().unwrap());
-            axum::serve(listener, app).await.unwrap();
         });
         Ok(())
     }
@@ -144,27 +137,10 @@ impl Application for MainServer {
     }
 
     fn run(&mut self, shutdown: CancellationToken, rt: Runtime) -> Result<(), Box<dyn Error>> {
-        self.start(Box::new(ShutdownSign::new(shutdown)), rt)?;
+        self.start(shutdown, rt)?;
         Ok(())
     }
 }
-
-struct ShutdownSign(CancellationToken);
-
-impl ShutdownSign {
-    pub fn new(cancel: CancellationToken) -> Self {
-        Self(cancel)
-    }
-}
-
-#[async_trait]
-impl ShutdownSignalWatch for ShutdownSign {
-    async fn recv(&self) -> ShutdownSignal {
-        self.0.cancelled().await;
-        ShutdownSignal::FastShutdown
-    }
-}
-
 fn build_external_api_registry(url: String, token: Option<String>) -> Registry {
     let config = ExternalApiConfig {
         url,

@@ -1,11 +1,10 @@
-use crate::cache::mcp_servers::Cache;
+use crate::cache::mcp_servers::{Cache, McpServerInfo};
+use crate::reverse_proxy::connection::ConnectionService;
 use crate::reverse_proxy::{ProxyResponse, build_error_stream_response};
 use axum::body::Body;
 use axum::extract::Request;
-use axum::response::Response;
 use bytes::Bytes;
 use http::{HeaderValue, StatusCode, Uri};
-use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
@@ -17,37 +16,31 @@ use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll;
+use axum::response::Response;
+use http_body_util::{BodyExt, StreamBody};
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tower_service::Service;
 
-static REGEX_ENDPOINT: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^(?P<scheme>https?)://(?P<host>[^/:]+)(?::(?P<port>\d+))?(?P<path>/.*)?$").unwrap()
-});
-static REGEX_CONNECT_ROUTER: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^/proxy/connect/([^/]+)/([^/]+)(/.*)?$").unwrap());
-
-static REGEX_MESSAGE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^(?P<path>[^?]+)\?sessionId=(?P<sid>[0-9a-fA-F\-]+)").unwrap());
-
-const HEADER_HOST: &str = "Host";
+static REGEX_MESSAGE_ROUTER: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^/proxy/message/([^/]+)/([^/]+)(/.*)?$").unwrap());
 
 #[derive(Clone)]
-pub struct ConnectionService {
+pub struct MessageService {
     client: Arc<Client<HttpsConnector<HttpConnector>, Body>>,
     cache: Arc<Cache>,
 }
 
-impl ConnectionService {
-    pub(crate) fn new(
+impl MessageService {
+    pub fn new(
         client: Arc<Client<HttpsConnector<HttpConnector>, Body>>,
         cache: Arc<Cache>,
     ) -> Self {
-        ConnectionService { client, cache }
+        Self { client, cache }
     }
 }
 
-impl Service<Request<Body>> for ConnectionService {
+impl Service<Request<Body>> for MessageService {
     type Response = ProxyResponse;
     type Error = Infallible;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -65,22 +58,27 @@ impl Service<Request<Body>> for ConnectionService {
             let stream = ReceiverStream::new(rx);
 
             let path = req.uri().path();
+            let path_query = req
+                .uri()
+                .query();
 
-            let (name, tag) = match parse_connection_router(path) {
-                Ok(res) => (res.0, res.1),
+            tracing::info!("path ===> {path}");
+            // tracing::info!("path_query ===> {path_query}");
+
+            let (name, tag, sub_path) = match parse_message_router(path) {
+                Ok(res) => res,
                 Err(err) => {
-                    tracing::error!("Failed to parse connection_router {err}");
+                    tracing::error!(error = ?err, "parse message router failed {path}");
                     return Ok(build_error_stream_response(
                         tx,
                         stream,
-                        "Failed to parse connection_router".to_string(),
+                        format!("Failed to parse message router {path}"),
                         StatusCode::INTERNAL_SERVER_ERROR,
                     ));
                 }
             };
 
             let mcp_server = match cache.load_server_info(&name, &tag).await {
-                Some(ep) => ep,
                 None => {
                     tracing::error!("Failed to find server info for '{name}'");
                     return Ok(build_error_stream_response(
@@ -90,25 +88,28 @@ impl Service<Request<Body>> for ConnectionService {
                         StatusCode::INTERNAL_SERVER_ERROR,
                     ));
                 }
+                Some(ep) => ep,
             };
 
-            *req.uri_mut() = match Uri::try_from(&mcp_server.endpoint) {
-                Ok(uri) => uri,
-                Err(err) => {
-                    tracing::error!(
-                        "Failed to convert endpoint to uri for {name} {tag}, error {err}"
-                    );
-                    return Ok(build_error_stream_response(
-                        tx,
-                        stream,
-                        format!("Failed to convert endpoint to uri for {name} {tag}"),
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                    ));
-                }
-            };
+            *req.uri_mut() =
+                match Uri::try_from(build_raw_message_path(&mcp_server, &sub_path, path_query)) {
+                    Ok(uri) => uri,
+                    Err(err) => {
+                        tracing::error!(
+                            "Failed to convert endpoint to uri for {name} {tag}, error {err}"
+                        );
+                        return Ok(build_error_stream_response(
+                            tx,
+                            stream,
+                            format!("Failed to convert endpoint to uri for {name} {tag}"),
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                        ));
+                    }
+                };
 
             if let Ok(host) = HeaderValue::from_str(mcp_server.host.as_str()) {
-                req.headers_mut().insert(HEADER_HOST, host);
+                req.headers_mut()
+                    .insert("host", host);
             };
 
             let response = client
@@ -127,27 +128,9 @@ impl Service<Request<Body>> for ConnectionService {
 
                 while let Some(chunk_result) = response_stream.next().await {
                     match chunk_result {
-                        Ok(mut chunk) => {
+                        Ok(chunk) => {
                             let chunk_str = String::from_utf8_lossy(&chunk);
                             tracing::info!("chunk: {:?}", chunk_str);
-
-                            if let Some((path, session_id)) = parse_message(chunk_str.as_ref()) {
-                                tracing::info!(
-                                    "connect mcp success sessionId={}, name={}, tag={}",
-                                    session_id,
-                                    &name,
-                                    &tag
-                                );
-
-                                let proxy_message_path =
-                                    build_proxy_message_path(&name, &tag, &path, &session_id);
-
-                                let mut proxy_body = String::from("event: endpoint\ndata: ");
-                                proxy_body.push_str(proxy_message_path.as_str());
-                                proxy_body.push_str("\r\n\r\n");
-
-                                chunk = Bytes::from(proxy_body);
-                            }
 
                             if let Err(e) = tx.send(Ok(Frame::data(Bytes::from(chunk)))).await {
                                 tracing::warn!("connection closed: {:?}", e);
@@ -184,41 +167,37 @@ impl Service<Request<Body>> for ConnectionService {
     }
 }
 
-// parse {name} {tag} from uri
-pub fn parse_connection_router(uri: &str) -> pingora_core::Result<(String, String)> {
-    match REGEX_CONNECT_ROUTER.captures(uri) {
-        None => {
-            tracing::error!("Can't parse [connection] uri {}", uri);
-            Err(pingora_core::Error::new(InternalError))
-        }
-        Some(caps) => Ok((caps[1].to_string(), caps[2].to_string())),
+fn build_raw_message_path(
+    mcp_server: &McpServerInfo,
+    sub_path: &str,
+    path_query: Option<&str>,
+) -> String {
+    let sub_path = sub_path.trim_matches('/');
+    let mut message_path = format!(
+        "{}://{}/{}",
+        mcp_server.scheme.as_str(),
+        mcp_server.host,
+        sub_path,
+    );
+
+    if let Some(query) = path_query {
+        message_path = format!("{message_path}?{query}");
     }
+
+    message_path
 }
 
-fn parse_message(input: &str) -> Option<(String, String)> {
-    let uri = if let Some(line) = input.lines().find(|l| l.trim_start().starts_with("data:")) {
-        line.trim_start_matches("data:").trim()
-    } else {
-        input.trim()
-    };
+//
+pub fn parse_message_router(uri: &str) -> pingora_core::Result<(String, String, String)> {
+    if let Some(caps) = REGEX_MESSAGE_ROUTER.captures(uri) {
+        let name = caps.get(1).unwrap().as_str().to_string();
+        let tag = caps.get(2).unwrap().as_str().to_string();
+        let sub_path = caps
+            .get(3)
+            .map_or("".to_string(), |m| m.as_str().to_string());
+        return Ok((name, tag, sub_path));
+    }
 
-    REGEX_MESSAGE
-        .captures(uri)
-        .map(|caps| (caps["path"].to_string(), caps["sid"].to_string()))
-}
-
-fn build_proxy_message_path(name: &str, tag: &str, message_path: &str, session_id: &str) -> String {
-    // build to /message/{name}/{tag}/{raw_message_path}?sessionId={session_id}
-    let raw_message_path = message_path.trim_start_matches("/");
-
-    let mut proxy_message_path = String::from("/proxy/message/");
-    proxy_message_path.push_str(name);
-    proxy_message_path.push('/');
-    proxy_message_path.push_str(tag);
-    proxy_message_path.push('/');
-    proxy_message_path.push_str(raw_message_path);
-    proxy_message_path.push_str("?sessionId=");
-    proxy_message_path.push_str(session_id);
-
-    proxy_message_path
+    tracing::error!("Can't parse [message] uri {}", uri);
+    Err(pingora_core::Error::new(InternalError))
 }

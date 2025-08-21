@@ -1,4 +1,4 @@
-use crate::{McpServer, Registry};
+use crate::{McpServer, Loader};
 use serde::Deserialize;
 use std::error::Error;
 use std::fs;
@@ -9,11 +9,11 @@ struct McpServers {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct SelfManagerRegistry {
+pub struct LocalFileLoader {
     mcp_servers: Vec<McpServer>,
 }
 
-impl SelfManagerRegistry {
+impl LocalFileLoader {
     pub fn new(path: String) -> Self {
         let mut registry = Self {
             mcp_servers: Vec::new(),
@@ -25,7 +25,7 @@ impl SelfManagerRegistry {
 }
 
 #[async_trait::async_trait]
-impl Registry for SelfManagerRegistry {
+impl Loader for LocalFileLoader {
     async fn list_mcp(&self) -> Result<Vec<McpServer>, Box<dyn Error>> {
         Ok(self.mcp_servers.clone())
     }

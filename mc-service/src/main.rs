@@ -6,9 +6,7 @@ use mc_booter::booter::Booter;
 use crate::server::MainServer;
 
 mod config;
-mod proxy;
 mod server;
-mod router;
 mod cache;
 
 mod reverse_proxy;
