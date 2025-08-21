@@ -32,7 +32,7 @@ impl Booter {
         let cli = Cli::parse();
 
         let mut filepath = String::new();
-        
+
         match &cli.command {
             Some(Commands::Run { config }) => match config.clone() {
                 None => {
@@ -48,7 +48,7 @@ impl Booter {
         }
 
         tracing::info!("Starting Service");
-        
+
         let rt = Builder::new_multi_thread()
             .worker_threads(num_cpus::get())
             .enable_all()
@@ -59,7 +59,7 @@ impl Booter {
         let shutdown_token = cancellation_token.clone();
 
         application.prepare(filepath)?;
-        
+
         rt.spawn(async move {
             let mut sigterm = signal(SignalKind::terminate()).expect("failed to bind SIGTERM");
 
@@ -73,7 +73,7 @@ impl Booter {
             }
             shutdown_token.cancel();
         });
-        
+
         if let Err(err) = application.run(cancellation_token, rt) {
             tracing::error!("Error running application: {}", err);
         }

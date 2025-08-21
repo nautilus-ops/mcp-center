@@ -1,5 +1,5 @@
 [package]
-name = "mc-register"
+name = "mc-loader"
 version = "0.1.0"
 edition = "2024"
 

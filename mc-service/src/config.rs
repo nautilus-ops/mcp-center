@@ -12,8 +12,6 @@ pub struct AppConfig {
 pub struct McpCenter {
     #[serde(default)]
     pub http_port: u16,
-    #[serde(default)]
-    pub cache_reflash_interval: u64,
 }
 
 #[derive(Deserialize, Debug, Clone)]

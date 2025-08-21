@@ -4,16 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-mc-booter = {path = "../mc-booter"}
-mc-common = {path = "../mc-common"}
-mc-register = {path = "../mc-register"}
+mc-booter = { path = "../mc-booter" }
+mc-common = { path = "../mc-common" }
+mc-loader = { path = "../mc-loader" }
 
-async-trait = "0.1.88"
-pingora-core = { version = "0.5.0", features = ["openssl"] }
-pingora-http = { version = "0.5.0" }
-pingora-load-balancing = { version = "0.5.0" }
-pingora-proxy = { version = "0.5.0" }
-tokio = { version = "1.46.1", features = ["full"] }
+tokio = { version = "1.46.1", features = ["full", "tracing"] }
 tokio-util = "0.7.15"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
@@ -21,9 +16,15 @@ bytes = "1.10.1"
 http = "1.3.1"
 serde = { version = "1.0.219", features = ["derive"] }
 toml = "0.9.4"
-cached = "0.56.0"
 regex = "1.11.1"
-url = "2.5.4"
+hyper = { version = "1.6.0", features = ["full"] }
+hyper-rustls = "0.27.7"
+hyper-util = { version = "0.1.16", features = ["client", "client-legacy"] }
+axum = "0.8.4"
+http-body-util = { version = "0.1.3", features = ["full"] }
+tokio-stream = "0.1"
+tower-service = "0.3.3"
+once_cell = "1.21.3"
 
 [dev-dependencies]
-assert2 = "0.3.16"
+
