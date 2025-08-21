@@ -2,6 +2,7 @@ use crate::app::application::Application;
 use clap::{Parser, Subcommand};
 use std::error::Error;
 use std::path::PathBuf;
+use std::process::exit;
 use tokio::runtime::Builder;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio_util::sync::CancellationToken;
@@ -28,7 +29,7 @@ pub enum Commands {
 pub struct Booter;
 
 impl Booter {
-    pub fn run<T: Application>(mut application: T) -> Result<(), Box<dyn Error>> {
+    pub fn run<T: Application>() -> Result<(), Box<dyn Error>> {
         let cli = Cli::parse();
 
         let mut filepath = String::new();
@@ -58,6 +59,9 @@ impl Booter {
         let cancellation_token = CancellationToken::new();
         let shutdown_token = cancellation_token.clone();
 
+        // create application
+        let mut application = T::new();
+
         application.prepare(filepath)?;
 
         rt.spawn(async move {
@@ -68,7 +72,9 @@ impl Booter {
                     tracing::info!("Received SIGTERM, shutting down...");
                 },
                 _ = tokio::signal::ctrl_c() => {
-                    tracing::info!("Received Ctrl+C, shutting down...");
+                    tracing::info!("Received Ctrl+C, shutting down directly...");
+                    // When long connections exist, axum seems unable to gracefully shut down. So need exit(0)
+                    exit(0)
                 }
             }
             shutdown_token.cancel();
