@@ -1,9 +1,9 @@
-use crate::{McpServer, Loader};
+use crate::{Loader, McpServer};
 use reqwest::Client;
 use serde::Deserialize;
 use std::error::Error;
 
-#[derive(Debug, Default,Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ExternalApiLoader {
     url: String,
     authorization: Option<String>,

@@ -1,5 +1,5 @@
-use std::error::Error;
 use serde::Deserialize;
+use std::error::Error;
 
 pub mod external_api;
 pub mod local;

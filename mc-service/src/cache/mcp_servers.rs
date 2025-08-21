@@ -19,7 +19,9 @@ static REGEX_ENDPOINT: Lazy<Regex> = Lazy::new(|| {
 pub struct McpServerInfo {
     pub endpoint: String,
     pub host: String,
+    #[expect(dead_code)]
     pub port: String,
+    #[expect(dead_code)]
     pub path: String,
     pub scheme: HttpScheme,
 }
@@ -96,10 +98,10 @@ impl Cache {
 
     pub async fn load_server_info(&self, mcp_name: &str, tag: &str) -> Option<McpServerInfo> {
         let cache = self.server_cache.read().await;
-        if let Some(tags) = cache.get(mcp_name) {
-            if let Some(info) = tags.get(tag) {
-                return Some(info.clone());
-            }
+        if let Some(tags) = cache.get(mcp_name)
+            && let Some(info) = tags.get(tag)
+        {
+            return Some(info.clone());
         }
         None
     }

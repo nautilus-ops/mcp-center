@@ -1,13 +1,13 @@
+use crate::server::MainServer;
+use mc_booter::booter::Booter;
 use std::error::Error;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry;
 use tracing_subscriber::util::SubscriberInitExt;
-use mc_booter::booter::Booter;
-use crate::server::MainServer;
 
+mod cache;
 mod config;
 mod server;
-mod cache;
 
 mod reverse_proxy;
 

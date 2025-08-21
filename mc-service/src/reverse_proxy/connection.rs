@@ -11,7 +11,6 @@ use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use once_cell::sync::Lazy;
-use pingora_core::InternalError;
 use regex::Regex;
 use std::convert::Infallible;
 use std::pin::Pin;
@@ -21,9 +20,6 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tower_service::Service;
 
-static REGEX_ENDPOINT: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^(?P<scheme>https?)://(?P<host>[^/:]+)(?::(?P<port>\d+))?(?P<path>/.*)?$").unwrap()
-});
 static REGEX_CONNECT_ROUTER: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^/proxy/connect/([^/]+)/([^/]+)(/.*)?$").unwrap());
 
@@ -149,16 +145,14 @@ impl Service<Request<Body>> for ConnectionService {
                                 chunk = Bytes::from(proxy_body);
                             }
 
-                            if let Err(e) = tx.send(Ok(Frame::data(Bytes::from(chunk)))).await {
+                            if let Err(e) = tx.send(Ok(Frame::data(chunk))).await {
                                 tracing::warn!("connection closed: {:?}", e);
                                 break;
                             }
                         }
                         Err(e) => {
                             tracing::error!("connection error: {:?}", e);
-                            let _ = tx
-                                .send(Err(std::io::Error::new(std::io::ErrorKind::Other, e)))
-                                .await;
+                            let _ = tx.send(Err(std::io::Error::other(e))).await;
                             break;
                         }
                     }
@@ -185,11 +179,11 @@ impl Service<Request<Body>> for ConnectionService {
 }
 
 // parse {name} {tag} from uri
-pub fn parse_connection_router(uri: &str) -> pingora_core::Result<(String, String)> {
+pub fn parse_connection_router(uri: &str) -> Result<(String, String), String> {
     match REGEX_CONNECT_ROUTER.captures(uri) {
         None => {
             tracing::error!("Can't parse [connection] uri {}", uri);
-            Err(pingora_core::Error::new(InternalError))
+            Err(format!("Can't parse [connection] uri {}", uri))
         }
         Some(caps) => Ok((caps[1].to_string(), caps[2].to_string())),
     }
@@ -221,4 +215,133 @@ fn build_proxy_message_path(name: &str, tag: &str, message_path: &str, session_i
     proxy_message_path.push_str(session_id);
 
     proxy_message_path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_parse_connection_router() {
+        struct TestCase {
+            uri: &'static str,
+            want: Result<(String, String), String>,
+        }
+
+        let tests = vec![
+            TestCase {
+                uri: "/proxy/connect/mcp-test/1.0.0",
+                want: Ok(("mcp-test".to_string(), "1.0.0".to_string())),
+            },
+            TestCase {
+                uri: "/proxy/connect/another-app/2.3.4",
+                want: Ok(("another-app".to_string(), "2.3.4".to_string())),
+            },
+            TestCase {
+                uri: "/proxy/connect/mcp-test",
+                want: Err("Can't parse [connection] uri /proxy/connect/mcp-test".to_string()),
+            },
+            TestCase {
+                uri: "/wrong/xxx/yyy",
+                want: Err("Can't parse [connection] uri /wrong/xxx/yyy".to_string()),
+            },
+        ];
+
+        for t in tests {
+            let got = parse_connection_router(t.uri);
+            match (&got, &t.want) {
+                (Ok(g), Ok(w)) => assert_eq!(g, w, "uri: {}", t.uri),
+                (Err(e), Err(w)) => assert_eq!(e, w, "uri: {}", t.uri),
+                _ => panic!("uri: {} => expected {:?}, got {:?}", t.uri, t.want, got),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_message() {
+        struct TestCase {
+            input: &'static str,
+            want: Option<(String, String)>,
+        }
+
+        let tests = vec![
+            TestCase {
+                input: "event: endpoint\ndata: /message?sessionId=36f34c7e-ec0c-4f6d-8451-38b4488ff4e4\r\n\r\n",
+                want: Some((
+                    "/message".to_string(),
+                    "36f34c7e-ec0c-4f6d-8451-38b4488ff4e4".to_string(),
+                )),
+            },
+            TestCase {
+                input: "data: /msg?sessionId=36f34c7e-ec0c-4f6d-8451-38b4488ff4e4\r\n",
+                want: Some((
+                    "/msg".to_string(),
+                    "36f34c7e-ec0c-4f6d-8451-38b4488ff4e4".to_string(),
+                )),
+            },
+            TestCase {
+                input: "/message?sessionId=36f34c7e-ec0c-4f6d-8451-38b4488ff4e4",
+                want: Some((
+                    "/message".to_string(),
+                    "36f34c7e-ec0c-4f6d-8451-38b4488ff4e4".to_string(),
+                )),
+            },
+            TestCase {
+                input: "data: /message/no-session-id\r\n",
+                want: None,
+            },
+            TestCase {
+                input: "",
+                want: None,
+            },
+        ];
+
+        for t in tests {
+            let got = parse_message(t.input);
+            assert_eq!(got, t.want, "input: {:?}", t.input);
+        }
+    }
+
+    #[test]
+    fn test_build_proxy_message_path() {
+        struct TestCase {
+            name: &'static str,
+            tag: &'static str,
+            message_path: &'static str,
+            session_id: &'static str,
+            want: &'static str,
+        }
+
+        let tests = vec![
+            TestCase {
+                name: "mcp-test",
+                tag: "1.0.0",
+                message_path: "/api/v1/message",
+                session_id: "36f34c7e-ec0c-4f6d-8451-38b4488ff4e4",
+                want: "/proxy/message/mcp-test/1.0.0/api/v1/message?sessionId=36f34c7e-ec0c-4f6d-8451-38b4488ff4e4",
+            },
+            TestCase {
+                name: "service",
+                tag: "v2",
+                message_path: "path/to/msg",
+                session_id: "36f34c7e-ec0c-4f6d-8451-38b4488ff4e4",
+                want: "/proxy/message/service/v2/path/to/msg?sessionId=36f34c7e-ec0c-4f6d-8451-38b4488ff4e4",
+            },
+            TestCase {
+                name: "test",
+                tag: "0.1",
+                message_path: "/",
+                session_id: "36f34c7e-ec0c-4f6d-8451-38b4488ff4e4",
+                want: "/proxy/message/test/0.1/?sessionId=36f34c7e-ec0c-4f6d-8451-38b4488ff4e4",
+            },
+        ];
+
+        for t in tests {
+            let got = build_proxy_message_path(t.name, t.tag, t.message_path, t.session_id);
+            assert_eq!(
+                got, t.want,
+                "name: {}, tag: {}, message_path: {}",
+                t.name, t.tag, t.message_path
+            );
+        }
+    }
 }

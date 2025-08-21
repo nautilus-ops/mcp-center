@@ -8,13 +8,13 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use mc_booter::app::application::Application;
 use mc_common::utils;
+use mc_loader::external_api::ExternalApiLoader;
+use mc_loader::local::LocalFileLoader;
 use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
-use mc_loader::external_api::ExternalApiLoader;
-use mc_loader::local::LocalFileLoader;
 
 pub enum Registry {
     Memory(String),
@@ -58,7 +58,7 @@ impl MainServer {
                 config.authorization.clone(),
             )),
         };
-        
+
         let runtime = Arc::new(rt);
 
         let cache = Arc::new(Cache::new(Arc::new(handler), runtime.clone(), 100));

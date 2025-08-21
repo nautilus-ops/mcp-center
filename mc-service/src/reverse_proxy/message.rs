@@ -1,23 +1,21 @@
 use crate::cache::mcp_servers::{Cache, McpServerInfo};
-use crate::reverse_proxy::connection::ConnectionService;
 use crate::reverse_proxy::{ProxyResponse, build_error_stream_response};
 use axum::body::Body;
 use axum::extract::Request;
+use axum::response::Response;
 use bytes::Bytes;
 use http::{HeaderValue, StatusCode, Uri};
+use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use once_cell::sync::Lazy;
-use pingora_core::InternalError;
 use regex::Regex;
 use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll;
-use axum::response::Response;
-use http_body_util::{BodyExt, StreamBody};
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tower_service::Service;
@@ -58,9 +56,7 @@ impl Service<Request<Body>> for MessageService {
             let stream = ReceiverStream::new(rx);
 
             let path = req.uri().path();
-            let path_query = req
-                .uri()
-                .query();
+            let path_query = req.uri().query();
 
             tracing::info!("path ===> {path}");
             // tracing::info!("path_query ===> {path_query}");
@@ -108,8 +104,7 @@ impl Service<Request<Body>> for MessageService {
                 };
 
             if let Ok(host) = HeaderValue::from_str(mcp_server.host.as_str()) {
-                req.headers_mut()
-                    .insert("host", host);
+                req.headers_mut().insert("host", host);
             };
 
             let response = client
@@ -132,16 +127,14 @@ impl Service<Request<Body>> for MessageService {
                             let chunk_str = String::from_utf8_lossy(&chunk);
                             tracing::info!("chunk: {:?}", chunk_str);
 
-                            if let Err(e) = tx.send(Ok(Frame::data(Bytes::from(chunk)))).await {
+                            if let Err(e) = tx.send(Ok(Frame::data(chunk))).await {
                                 tracing::warn!("connection closed: {:?}", e);
                                 break;
                             }
                         }
                         Err(e) => {
                             tracing::error!("connection error: {:?}", e);
-                            let _ = tx
-                                .send(Err(std::io::Error::new(std::io::ErrorKind::Other, e)))
-                                .await;
+                            let _ = tx.send(Err(std::io::Error::other(e))).await;
                             break;
                         }
                     }
@@ -188,7 +181,7 @@ fn build_raw_message_path(
 }
 
 //
-pub fn parse_message_router(uri: &str) -> pingora_core::Result<(String, String, String)> {
+pub fn parse_message_router(uri: &str) -> Result<(String, String, String), String> {
     if let Some(caps) = REGEX_MESSAGE_ROUTER.captures(uri) {
         let name = caps.get(1).unwrap().as_str().to_string();
         let tag = caps.get(2).unwrap().as_str().to_string();
@@ -199,5 +192,100 @@ pub fn parse_message_router(uri: &str) -> pingora_core::Result<(String, String, 
     }
 
     tracing::error!("Can't parse [message] uri {}", uri);
-    Err(pingora_core::Error::new(InternalError))
+    Err(format!("Can't parse [message] uri {}", uri))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mc_common::types::HttpScheme;
+    #[test]
+    fn test_parse_message_router() {
+        struct TestCase {
+            uri: &'static str,
+            want: Result<(String, String, String), String>,
+        }
+
+        let tests = vec![
+            TestCase {
+                uri: "/proxy/message/mcp-test/1.0.0/api/sse/message",
+                want: Ok((
+                    "mcp-test".to_string(),
+                    "1.0.0".to_string(),
+                    "/api/sse/message".to_string(),
+                )),
+            },
+            TestCase {
+                uri: "/proxy/message/mcp-test/1.0.0/message",
+                want: Ok((
+                    "mcp-test".to_string(),
+                    "1.0.0".to_string(),
+                    "/message".to_string(),
+                )),
+            },
+            TestCase {
+                uri: "/invalid/uri",
+                want: Err("Can't parse [message] uri /invalid/uri".to_string()),
+            },
+        ];
+
+        for t in tests {
+            let result = parse_message_router(t.uri);
+            assert_eq!(result, t.want, "uri: {}", t.uri);
+        }
+    }
+
+    #[test]
+    fn test_build_raw_message_path() {
+        let https_server = McpServerInfo {
+            endpoint: "".to_string(),
+            scheme: HttpScheme::Https,
+            host: "example.com".to_string(),
+            port: "".to_string(),
+            path: "".to_string(),
+        };
+
+        struct TestCase {
+            server: McpServerInfo,
+            sub_path: &'static str,
+            path_query: Option<&'static str>,
+            want: &'static str,
+        }
+
+        let tests = vec![
+            TestCase {
+                server: https_server.clone(),
+                sub_path: "api/v1/message",
+                path_query: None,
+                want: "https://example.com/api/v1/message",
+            },
+            TestCase {
+                server: https_server.clone(),
+                sub_path: "/api/v1/message/",
+                path_query: None,
+                want: "https://example.com/api/v1/message",
+            },
+            TestCase {
+                server: https_server.clone(),
+                sub_path: "api/v1/message",
+                path_query: Some("foo=bar"),
+                want: "https://example.com/api/v1/message?foo=bar",
+            },
+            TestCase {
+                server: https_server.clone(),
+                sub_path: "/api/v1/message/",
+                path_query: Some("k=v&x=1"),
+                want: "https://example.com/api/v1/message?k=v&x=1",
+            },
+        ];
+
+        for t in tests {
+            let got = build_raw_message_path(&t.server, t.sub_path, t.path_query);
+            assert_eq!(
+                got, t.want,
+                "sub_path: {}, query: {:?}",
+                t.sub_path, t.path_query
+            );
+        }
+    }
 }
