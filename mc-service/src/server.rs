@@ -1,8 +1,12 @@
 use crate::cache::mcp_servers::Cache;
 use crate::config::{AppConfig, McpRegistry};
+use crate::db::DBClient;
 use crate::reverse_proxy::connection::ConnectionService;
 use crate::reverse_proxy::message::MessageService;
+use crate::service;
+use crate::service::AppState;
 use axum::Router;
+use axum::routing::get;
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
@@ -14,6 +18,7 @@ use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 pub enum Registry {
@@ -72,6 +77,24 @@ impl McpCenterServer {
 
         let client = Arc::new(Client::builder(TokioExecutor::new()).build(https));
 
+        let host = &self.config.postgres.host;
+        let port = self.config.postgres.port;
+        let username = &self.config.postgres.username;
+        let database = &self.config.postgres.database;
+        let password = &self.config.postgres.password;
+        let max_connection = self.config.postgres.max_connection;
+
+        let db_client = runtime.block_on(async move {
+            DBClient::create(host, port, username, password, database, max_connection)
+                .await
+                .unwrap()
+        });
+        let db_client = Arc::new(db_client);
+
+        let state = AppState {
+            db: db_client.clone(),
+        };
+
         let app = Router::new()
             .route_service(
                 "/proxy/connect/{name}/{tag}",
@@ -80,7 +103,9 @@ impl McpCenterServer {
             .route_service(
                 "/proxy/message/{name}/{tag}/{*subPath}",
                 MessageService::new(client.clone(), cache.clone()),
-            );
+            )
+            .route("/api/registry/mcp-server", get(service::list_all))
+            .with_state(state);
 
         runtime.block_on(async move {
             let listener =
@@ -88,7 +113,7 @@ impl McpCenterServer {
                     .await
                     .unwrap();
 
-            let shutdown_signal = || async move {
+            let shutdown = || async move {
                 shutdown_signal.cancelled().await;
                 tracing::info!("Shutting down...");
             };
@@ -96,7 +121,7 @@ impl McpCenterServer {
             tracing::info!("starting HTTP server on port {}", self.bootstrap.port);
 
             axum::serve(listener, app)
-                .with_graceful_shutdown(shutdown_signal())
+                .with_graceful_shutdown(shutdown())
                 .await
                 .unwrap();
         });

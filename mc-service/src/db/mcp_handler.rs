@@ -2,11 +2,11 @@ use crate::db::DBClient;
 use crate::db::model::McpServers;
 use std::sync::Arc;
 
-struct McpHandler {
+pub struct McpHandler {
     client: Arc<DBClient>,
 }
 impl McpHandler {
-    fn new(client: Arc<DBClient>) -> Self {
+    pub fn new(client: Arc<DBClient>) -> Self {
         McpHandler { client }
     }
 
