@@ -1,13 +1,13 @@
 pub mod model;
 mod mcp_handler;
 mod token_handler;
+mod settings_handler;
 
 pub use mcp_handler::*;
-pub use token_handler::*;
+pub use settings_handler::*;
 
 use sqlx::postgres::PgPoolOptions;
 use std::error::Error;
-use std::sync::Arc;
 use sqlx::{Pool, Postgres};
 
 #[derive(Clone)]

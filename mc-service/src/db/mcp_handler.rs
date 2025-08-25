@@ -27,8 +27,8 @@ impl McpDBHandler {
             sqlx::query_as::<_, McpServers>(
                 r#"
         INSERT INTO tb_mcp_servers
-            (id,name, tag, endpoint, transport_type, description, extra)
-        VALUES ($1, $2, $3, $4, $5, $6)
+            (id, name, tag, endpoint, transport_type, description, extra)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
         "#,
             )

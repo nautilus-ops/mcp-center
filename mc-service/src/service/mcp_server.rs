@@ -1,25 +1,45 @@
-use crate::db::McpDBHandler;
-use crate::db::model::McpServers;
+use crate::db::model::{McpServers, SettingKey, SystemSettings};
+use crate::db::{McpDBHandler, SystemSettingsDBHandler};
+use crate::event::Event;
 use crate::service::{AppState, Response};
 use axum::Json;
-use axum::extract::State;
-use chrono::NaiveDateTime;
+use axum::extract::{Query, State};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[derive(Deserialize, Debug)]
+pub struct ListAllRequest {
+    use_raw_endpoint: Option<bool>,
+}
+
 pub async fn list_all(
     State(state): State<AppState>,
+    Query(params): Query<ListAllRequest>,
 ) -> Result<Json<Response>, (StatusCode, String)> {
-    let db_client = state.db.clone();
-    let handler = McpDBHandler::new(db_client);
-    let servers = handler.list_all().await.map_err(|e| {
+    let mcp_handler = McpDBHandler::new(state.db.clone());
+    let settings_handler = SystemSettingsDBHandler::new(state.db.clone());
+
+    let self_address = settings_handler
+        .get_system_settings(SettingKey::SelfAddress)
+        .await;
+
+    let mut servers = mcp_handler.list_all().await.map_err(|e| {
         tracing::error!("Failed to list mcp servers {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to list mcp servers".to_string(),
         )
     })?;
+
+    if params.use_raw_endpoint.is_none() || !params.use_raw_endpoint.unwrap() {
+        servers.iter_mut().for_each(|server| {
+            server.endpoint = format!(
+                "{self_address}/proxy/connect/{}/{}",
+                server.name, server.tag
+            );
+        })
+    }
 
     let data = serde_json::to_value(servers).map_err(|e| {
         tracing::error!("Failed to parse mcp servers {}", e);
@@ -32,7 +52,7 @@ pub async fn list_all(
     Ok(Json(Response::new(Some(data))))
 }
 
-#[derive(Deserialize,Serialize,Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct McpRegisterRequest {
     pub name: String,
     pub tag: String,
@@ -47,24 +67,38 @@ pub async fn register_mcp_server(
     Json(server): Json<McpRegisterRequest>,
 ) -> Result<Json<Response>, (StatusCode, String)> {
     let db_client = state.db.clone();
-    let res = McpDBHandler::new(db_client).create_or_update(&McpServers{
-        id: Uuid::new_v4(),
-        name: server.name.clone(),
-        tag: server.tag.clone(),
-        endpoint: server.endpoint.clone(),
-        transport_type: server.transport_type.clone(),
-        description: server.description.clone(),
-        extra: server.extra.clone(),
-        created_at: Default::default(),
-        updated_at: Default::default(),
-        deleted_at: None,
-    }).await.map_err(|e| {
-        tracing::error!("Failed to create mcp server {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to create mcp server".to_string(),
-        )
-    })?;
+    let res = McpDBHandler::new(db_client)
+        .create_or_update(&McpServers {
+            id: Uuid::new_v4(),
+            name: server.name.clone(),
+            tag: server.tag.clone(),
+            endpoint: server.endpoint.clone(),
+            transport_type: server.transport_type.clone(),
+            description: server.description.clone(),
+            extra: server.extra.clone(),
+            created_at: Default::default(),
+            updated_at: Default::default(),
+            deleted_at: None,
+        })
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to create mcp server {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create mcp server".to_string(),
+            )
+        })?;
+
+    tokio::task::spawn(async move {
+        if let Err(err) = state.event_sender.send(Event::CreateOrUpdate {
+            mcp_name: server.name.clone(),
+            tag: server.tag.clone(),
+            endpoint: server.endpoint.clone(),
+        }) {
+            tracing::error!("Failed to send event {}", err);
+        }
+        tracing::info!("MCP server {} registered", server.name);
+    });
 
     let data = serde_json::to_value(res).map_err(|e| {
         tracing::error!("Failed to parse mcp servers {}", e);
