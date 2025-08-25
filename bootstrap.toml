@@ -1,9 +1,16 @@
 [mcp_center]
 http_port = "${HTTP_PORT:5432}"
-cache_reflash_interval = "${CACHE_REFLASH_INTERVAL:3600}"   # Default one hour
 
 [mcp_registry]
 type = "${REGISTRY_TYPE:memory}"
 url = "${EXTERNAL_API}"
 token = "${EXTERNAL_AUTHORIZATION}"
 mcp_definition_path = "${SERVER_DEFINITION_PATH:mcp_servers.toml}"
+
+[postgres]
+host = "${POSTGRES_HOST}"
+port = "${POSTGRES_PORT:5432}"
+username = "${POSTGRES_USERNAME:postgres}"
+password = "${POSTGRES_PASSWORD:postgres}"
+database = "${POSTGRES_DATABASE:mcp}"
+max_connection = "${POSTGRES_MAX_CONNECTION:5}"
