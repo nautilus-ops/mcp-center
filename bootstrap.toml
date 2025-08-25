@@ -1,6 +1,5 @@
 [mcp_center]
 http_port = "${HTTP_PORT:5432}"
-cache_reflash_interval = "${CACHE_REFLASH_INTERVAL:3600}"
 
 [mcp_registry]
 type = "${REGISTRY_TYPE:memory}"
