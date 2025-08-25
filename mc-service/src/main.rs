@@ -12,6 +12,7 @@ mod server;
 mod reverse_proxy;
 mod db;
 mod service;
+mod event;
 
 fn main() -> Result<(), Box<dyn Error>> {
     registry()

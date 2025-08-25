@@ -1,3 +1,4 @@
+use crate::event::Event;
 use mc_common::types::HttpScheme;
 use mc_loader::Loader;
 use once_cell::sync::Lazy;
@@ -9,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
+use tokio::sync::broadcast::Receiver;
 use tokio::time::interval;
 
 static REGEX_ENDPOINT: Lazy<Regex> = Lazy::new(|| {
@@ -34,13 +36,19 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub fn new(handle: Arc<Box<dyn Loader>>, runtime: Arc<Runtime>, interval: u64) -> Self {
+    pub fn new(
+        handle: Arc<Box<dyn Loader>>,
+        receiver: Receiver<Event>,
+        runtime: Arc<Runtime>,
+        interval: u64,
+    ) -> Self {
         let cache = Self {
             handle,
             server_cache: Arc::new(RwLock::new(HashMap::new())),
             runtime,
         };
         cache.async_cache(interval);
+        cache.handle_event(receiver);
         cache
     }
     fn async_cache(&self, cache_interval: u64) {
@@ -104,6 +112,70 @@ impl Cache {
             return Some(info.clone());
         }
         None
+    }
+
+    pub async fn update_or_create_server_info(
+        &self,
+        mcp_name: &str,
+        tag: &str,
+        server: McpServerInfo,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut cache = self.server_cache.write().await;
+
+        match cache.get_mut(mcp_name) {
+            None => {
+                let mut tags = HashMap::new();
+                tags.insert(tag.to_string(), server);
+                cache.insert(mcp_name.to_string(), tags);
+            }
+            Some(tags) => {
+                tags.insert(tag.to_string(), server);
+            }
+        };
+
+        Ok(())
+    }
+
+    fn handle_event(&self, mut receiver: Receiver<Event>) {
+        let cache = self.server_cache.clone();
+        self.runtime.spawn(async move {
+            while let Ok(event) = receiver.recv().await {
+                match event {
+                    Event::Delete { mcp_name, tag } => {
+                        let mut cache = cache.write().await;
+                        if let Some(tags) = cache.get_mut(&mcp_name) {
+                            tags.remove(tag.as_str());
+                        }
+                        tracing::info!("Remove mcp server {}/{} from cache", mcp_name, tag);
+                    }
+                    Event::CreateOrUpdate {
+                        mcp_name,
+                        tag,
+                        endpoint,
+                    } => {
+                        let server = parse_endpoint(endpoint.as_str())
+                            .map_err(|err| {
+                                tracing::error!("Failed to parse endpoint, error: {}", err);
+                            })
+                            .unwrap();
+
+                        let mut cache = cache.write().await;
+
+                        match cache.get_mut(&mcp_name) {
+                            None => {
+                                let mut tags = HashMap::new();
+                                tags.insert(tag.to_string(), server);
+                                cache.insert(mcp_name.to_string(), tags);
+                            }
+                            Some(tags) => {
+                                tags.insert(tag.to_string(), server);
+                            }
+                        };
+                        tracing::info!("update or create mcp server {}/{} success", mcp_name, tag);
+                    }
+                }
+            }
+        });
     }
 }
 fn parse_endpoint(endpoint: &str) -> Result<McpServerInfo, Box<dyn Error>> {
