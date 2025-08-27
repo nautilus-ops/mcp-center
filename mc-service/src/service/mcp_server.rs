@@ -1,4 +1,4 @@
-use crate::db::model::{McpServers, SettingKey, SystemSettings};
+use crate::db::model::{CreateFrom, McpServers, SettingKey, SystemSettings};
 use crate::db::{McpDBHandler, SystemSettingsDBHandler};
 use crate::event::Event;
 use crate::service::{AppState, Response};
@@ -59,6 +59,7 @@ pub struct McpRegisterRequest {
     pub endpoint: String,
     pub transport_type: String,
     pub description: String,
+    pub create_from: Option<String>,
     pub extra: Option<serde_json::Value>,
 }
 
@@ -68,13 +69,18 @@ pub async fn register_mcp_server(
 ) -> Result<Json<Response>, (StatusCode, String)> {
     let db_client = state.db.clone();
     let res = McpDBHandler::new(db_client)
-        .create_or_update(&McpServers {
+        .create(&McpServers {
             id: Uuid::new_v4(),
             name: server.name.clone(),
             tag: server.tag.clone(),
             endpoint: server.endpoint.clone(),
             transport_type: server.transport_type.clone(),
             description: server.description.clone(),
+            create_from: if server.create_from.is_some() {
+                server.create_from.unwrap().clone()
+            } else {
+                CreateFrom::Register.to_string()
+            },
             extra: server.extra.clone(),
             created_at: Default::default(),
             updated_at: Default::default(),

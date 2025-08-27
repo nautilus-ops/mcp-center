@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS tb_mcp_servers
     tag            TEXT      NOT NULL,
     endpoint       TEXT      NOT NULL,
     transport_type TEXT      NOT NULL,
+    create_from    TEXT      NOT NULL DEFAULT 'register',
     description    TEXT      NOT NULL DEFAULT '',
     extra          JSONB     NOT NULL DEFAULT '{}',
     created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -26,6 +27,7 @@ COMMENT ON COLUMN tb_mcp_servers.name IS 'MCP Server name';
 COMMENT ON COLUMN tb_mcp_servers.tag IS 'MCP Server tag, used to distinguish different versions or instances';
 COMMENT ON COLUMN tb_mcp_servers.endpoint IS 'MCP Server public endpoint (URL)';
 COMMENT ON COLUMN tb_mcp_servers.transport_type IS 'Transport type, e.g. sse or streamable';
+COMMENT ON COLUMN tb_mcp_servers.create_from IS 'MCP Server create from, e.g. manual, register, kubernetes-service';
 COMMENT ON COLUMN tb_mcp_servers.extra IS 'Additional configuration information';
 COMMENT ON COLUMN tb_mcp_servers.created_at IS 'Record creation time';
 COMMENT ON COLUMN tb_mcp_servers.updated_at IS 'Last update time';
