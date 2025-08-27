@@ -13,18 +13,17 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use mc_booter::app::application::Application;
 use mc_common::utils;
-use mc_loader::external_api::ExternalApiLoader;
-use mc_loader::local::LocalFileLoader;
 use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-use tokio::sync::broadcast::Receiver;
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
 pub enum Registry {
+    #[allow(dead_code)]
     Memory(String),
+    #[allow(dead_code)]
     ExternalAPI(ExternalApiConfig),
 }
 
@@ -35,7 +34,9 @@ impl Default for Registry {
 }
 
 pub struct ExternalApiConfig {
+    #[allow(dead_code)]
     pub url: String,
+    #[allow(dead_code)]
     pub authorization: Option<String>,
 }
 
@@ -58,24 +59,17 @@ impl McpCenterServer {
     }
 
     fn start(&self, shutdown_signal: CancellationToken, rt: Runtime) -> Result<(), Box<dyn Error>> {
-        let handler: Box<dyn mc_loader::Loader> = match &self.bootstrap.registry {
-            Registry::Memory(path) => Box::new(LocalFileLoader::new(path.clone())),
-            Registry::ExternalAPI(config) => Box::new(ExternalApiLoader::new(
-                config.url.as_str(),
-                config.authorization.clone(),
-            )),
-        };
+        // let handler: Box<dyn mc_loader::Loader> = match &self.bootstrap.registry {
+        //     Registry::Memory(path) => Box::new(LocalFileLoader::new(path.clone())),
+        //     Registry::ExternalAPI(config) => Box::new(ExternalApiLoader::new(
+        //         config.url.as_str(),
+        //         config.authorization.clone(),
+        //     )),
+        // };
 
         let runtime = Arc::new(rt);
 
         let (tx, _) = broadcast::channel::<Event>(100);
-
-        let cache = Arc::new(Cache::new(
-            Arc::new(handler),
-            tx.subscribe(),
-            runtime.clone(),
-            100,
-        ));
 
         let https = HttpsConnectorBuilder::new()
             .with_native_roots()
@@ -95,12 +89,19 @@ impl McpCenterServer {
 
         let db_client = runtime.block_on(async move {
             DBClient::create(host, port, username, password, database, max_connection)
-                .await.map_err(|e| {
+                .await.inspect_err(|_| {
                 tracing::error!("Error creating database client, host: {host}, port: {port}, user: {username}, database: {database}, max_connection: {max_connection}");
-                e
             }).unwrap()
         });
         let db_client = Arc::new(db_client);
+
+        // mcp cache for reverse proxy, load mcp servers from postgres
+        let cache = Arc::new(Cache::new(
+            db_client.clone(),
+            tx.subscribe(),
+            runtime.clone(),
+            100,
+        ));
 
         let state = AppState {
             db: db_client.clone(),

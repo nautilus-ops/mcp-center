@@ -1,4 +1,4 @@
-use crate::db::model::{CreateFrom, McpServers, SettingKey, SystemSettings};
+use crate::db::model::{CreateFrom, McpServers, SettingKey};
 use crate::db::{McpDBHandler, SystemSettingsDBHandler};
 use crate::event::Event;
 use crate::service::{AppState, Response};

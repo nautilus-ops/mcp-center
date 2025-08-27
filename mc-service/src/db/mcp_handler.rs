@@ -1,8 +1,5 @@
 use crate::db::DBClient;
 use crate::db::model::McpServers;
-use crate::service::Response;
-use axum::Json;
-use http::StatusCode;
 use std::sync::Arc;
 
 pub struct McpDBHandler {
@@ -15,11 +12,9 @@ impl McpDBHandler {
     }
 
     pub async fn list_all(&self) -> Result<Vec<McpServers>, sqlx::Error> {
-        Ok(
-            sqlx::query_as::<_, McpServers>("SELECT * FROM tb_mcp_servers")
-                .fetch_all(&self.client.pool)
-                .await?,
-        )
+        sqlx::query_as::<_, McpServers>("SELECT * FROM tb_mcp_servers")
+            .fetch_all(&self.client.pool)
+            .await
     }
 
     pub async fn create(&self, server: &McpServers) -> Result<McpServers, sqlx::Error> {
@@ -32,7 +27,7 @@ impl McpDBHandler {
         RETURNING *
         "#,
             )
-            .bind(&server.id)
+            .bind(server.id)
             .bind(&server.name)
             .bind(&server.tag)
             .bind(&server.endpoint)
@@ -51,7 +46,7 @@ impl McpDBHandler {
         RETURNING *
         "#,
             )
-            .bind(&server.id)
+            .bind(server.id)
             .bind(&server.name)
             .bind(&server.tag)
             .bind(&server.endpoint)

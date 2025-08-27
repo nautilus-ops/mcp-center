@@ -1,6 +1,6 @@
+use crate::db::{DBClient, McpDBHandler};
 use crate::event::Event;
 use mc_common::types::HttpScheme;
-use mc_loader::Loader;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
@@ -21,29 +21,33 @@ static REGEX_ENDPOINT: Lazy<Regex> = Lazy::new(|| {
 pub struct McpServerInfo {
     pub endpoint: String,
     pub host: String,
-    #[expect(dead_code)]
     pub port: String,
-    #[expect(dead_code)]
     pub path: String,
     pub scheme: HttpScheme,
 }
 
+impl PartialEq for McpServerInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.host == other.host && self.port == other.port && self.path == other.path
+    }
+}
+
 #[derive(Clone)]
 pub struct Cache {
-    handle: Arc<Box<dyn Loader>>,
+    db_client: Arc<DBClient>,
     server_cache: Arc<RwLock<HashMap<String, HashMap<String, McpServerInfo>>>>,
     runtime: Arc<Runtime>,
 }
 
 impl Cache {
     pub fn new(
-        handle: Arc<Box<dyn Loader>>,
+        db_client: Arc<DBClient>,
         receiver: Receiver<Event>,
         runtime: Arc<Runtime>,
         interval: u64,
     ) -> Self {
         let cache = Self {
-            handle,
+            db_client,
             server_cache: Arc::new(RwLock::new(HashMap::new())),
             runtime,
         };
@@ -53,14 +57,15 @@ impl Cache {
     }
     fn async_cache(&self, cache_interval: u64) {
         let cache = self.server_cache.clone();
-        let handle = self.handle.clone();
+        let db_client = self.db_client.clone();
 
         self.runtime.spawn(async move {
             let mut ticker = interval(Duration::from_secs(cache_interval));
             loop {
                 ticker.tick().await;
 
-                let mcp_servers = match handle.list_mcp().await {
+                let handler = McpDBHandler::new(db_client.clone());
+                let mcp_servers = match handler.list_all().await {
                     Ok(results) => results,
                     Err(err) => {
                         tracing::error!("Can't list mcp servers, error: {}", err);
@@ -68,19 +73,13 @@ impl Cache {
                     }
                 };
 
-                let mut mcps = cache.write().await;
+                let mut updated_count: usize = 0;
+                let all_count: usize = mcp_servers.len();
 
-                mcp_servers.iter().for_each(|server| {
-                    let mut tag = match &server.version {
-                        None => "default".to_string(),
-                        Some(version) => version.clone(),
-                    };
+                for server in mcp_servers {
+                    let r_cache = cache.read().await;
 
-                    if let Some(t) = &server.tag {
-                        tag = t.clone();
-                    }
-
-                    let mut item = HashMap::<String, McpServerInfo>::new();
+                    let tag = &server.tag;
 
                     let mcp_server = match parse_endpoint(server.endpoint.as_str()) {
                         Ok(p) => p,
@@ -90,8 +89,24 @@ impl Cache {
                         }
                     };
 
-                    item.insert(tag.clone(), mcp_server);
-                    mcps.insert(server.name.clone(), item);
+                    if let Some(tags) = r_cache.get(&server.name)
+                        && let Some(item) = tags.get(&server.tag)
+                        && item == &mcp_server
+                    {
+                        return;
+                    }
+
+                    // unlock the read lock
+                    drop(r_cache);
+
+                    updated_count += 1;
+
+                    let mut w_cache = cache.write().await;
+
+                    w_cache
+                        .entry(server.name.clone())
+                        .or_insert_with(HashMap::new)
+                        .insert(tag.clone(), mcp_server);
 
                     tracing::info!(
                         "Load mcp server {}/{} success, endpoint: {}",
@@ -99,7 +114,13 @@ impl Cache {
                         tag,
                         server.endpoint
                     );
-                });
+                }
+
+                tracing::info!(
+                    updated_count = updated_count,
+                    no_need_update = all_count - updated_count,
+                    "sync mcp servers done"
+                );
             }
         });
     }
@@ -114,6 +135,7 @@ impl Cache {
         None
     }
 
+    #[allow(dead_code)]
     pub async fn update_or_create_server_info(
         &self,
         mcp_name: &str,

@@ -9,10 +9,10 @@ mod cache;
 mod config;
 mod server;
 
-mod reverse_proxy;
 mod db;
-mod service;
 mod event;
+mod reverse_proxy;
+mod service;
 
 fn main() -> Result<(), Box<dyn Error>> {
     registry()

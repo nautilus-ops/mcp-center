@@ -30,19 +30,15 @@ impl Response {
         }
     }
 
+    #[allow(dead_code)]
     fn with_code(mut self, code: u16) -> Self {
         self.code = code;
         self
     }
 
+    #[allow(dead_code)]
     fn with_message(mut self, message: String) -> Self {
         self.message = message;
         self
-    }
-
-    fn internal_error_resp(message: &str) -> Self {
-        Self::new(None)
-            .with_code(500)
-            .with_message(message.to_string())
     }
 }

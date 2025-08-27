@@ -1,9 +1,7 @@
 #[derive(Clone)]
 pub enum Event {
-    Delete {
-        mcp_name: String,
-        tag: String,
-    },
+    #[allow(dead_code)]
+    Delete { mcp_name: String, tag: String },
     CreateOrUpdate {
         mcp_name: String,
         tag: String,

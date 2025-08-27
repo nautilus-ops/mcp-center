@@ -23,8 +23,8 @@ pub fn replace_env_variables(input: String) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
     use crate::utils::replace_env_variables;
+    use std::env;
 
     #[test]
     fn test_replace_env_variables() {

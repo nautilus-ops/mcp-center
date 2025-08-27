@@ -1,14 +1,14 @@
-pub mod model;
 mod mcp_handler;
-mod token_handler;
+pub mod model;
 mod settings_handler;
+mod token_handler;
 
 pub use mcp_handler::*;
 pub use settings_handler::*;
 
 use sqlx::postgres::PgPoolOptions;
-use std::error::Error;
 use sqlx::{Pool, Postgres};
+use std::error::Error;
 
 #[derive(Clone)]
 pub struct DBClient {
@@ -32,8 +32,6 @@ impl DBClient {
             .connect(format!("postgres://{username}:{password}@{host}:{port}/{database}").as_str())
             .await?;
 
-        Ok(DBClient {
-            pool,
-        })
+        Ok(DBClient { pool })
     }
 }
