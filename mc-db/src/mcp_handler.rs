@@ -1,5 +1,5 @@
-use crate::db::DBClient;
-use crate::db::model::McpServers;
+use crate::DBClient;
+use crate::model::McpServers;
 use std::sync::Arc;
 
 pub struct McpDBHandler {

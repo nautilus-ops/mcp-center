@@ -1,13 +1,13 @@
 mod mcp_server;
 
-pub use mcp_server::*;
-
-use crate::db::DBClient;
 use crate::event::Event;
+use mc_db::DBClient;
+pub use mcp_server::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::broadcast::Sender;
 
+pub mod event;
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<DBClient>,

@@ -1,0 +1,14 @@
+[package]
+name = "mc-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+sqlx = { version = "0.8.6", features = ["postgres", "chrono","uuid", "runtime-tokio", "macros"] }
+uuid = { version = "1.17.0", features = ["serde", "v4"] }
+chrono = { version = "0.4.41", features = ["serde", "clock"] }
+serde_json = "1.0.143"
+serde = { version = "1.0.219", features = ["derive"] }

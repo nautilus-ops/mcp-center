@@ -1,11 +1,7 @@
 use crate::cache::mcp_servers::Cache;
 use crate::config::{AppConfig, McpRegistry};
-use crate::db::DBClient;
-use crate::event::Event;
 use crate::reverse_proxy::connection::ConnectionService;
 use crate::reverse_proxy::message::MessageService;
-use crate::service;
-use crate::service::AppState;
 use axum::Router;
 use axum::routing::{get, post};
 use hyper_rustls::HttpsConnectorBuilder;
@@ -13,6 +9,9 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use mc_booter::app::application::Application;
 use mc_common::utils;
+use mc_db::DBClient;
+use mc_registry::AppState;
+use mc_registry::event::Event;
 use std::error::Error;
 use std::fs;
 use std::sync::Arc;
@@ -117,10 +116,10 @@ impl McpCenterServer {
                 "/proxy/message/{name}/{tag}/{*subPath}",
                 MessageService::new(client.clone(), cache.clone()),
             )
-            .route("/api/registry/mcp-server", get(service::list_all))
+            .route("/api/registry/mcp-server", get(mc_registry::list_all))
             .route(
                 "/api/registry/mcp-server",
-                post(service::register_mcp_server),
+                post(mc_registry::register_mcp_server),
             )
             .with_state(state);
 

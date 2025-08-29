@@ -6,7 +6,8 @@ edition = "2024"
 [dependencies]
 mc-booter = { path = "../mc-booter" }
 mc-common = { path = "../mc-common" }
-mc-loader = { path = "../mc-loader" }
+mc-registry = { path = "../mc-registry" }
+mc-db = { path = "../mc-db" }
 
 tokio = { version = "1.46.1", features = ["full", "tracing"] }
 tokio-util = "0.7.15"
@@ -25,9 +26,7 @@ http-body-util = { version = "0.1.3", features = ["full"] }
 tokio-stream = "0.1"
 tower-service = "0.3.3"
 once_cell = "1.21.3"
-sqlx = { version = "0.8.6", features = ["postgres", "chrono","uuid", "runtime-tokio", "macros"] }
 uuid = { version = "1.17.0", features = ["serde", "v4"] }
-chrono = { version = "0.4.41", features = ["serde", "clock"] }
 serde_json = "1.0.143"
 
 [dev-dependencies]

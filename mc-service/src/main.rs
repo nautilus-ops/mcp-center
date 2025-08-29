@@ -7,12 +7,8 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 mod cache;
 mod config;
-mod server;
-
-mod db;
-mod event;
 mod reverse_proxy;
-mod service;
+mod server;
 
 fn main() -> Result<(), Box<dyn Error>> {
     registry()

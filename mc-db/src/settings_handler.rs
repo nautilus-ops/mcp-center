@@ -1,5 +1,5 @@
-use crate::db::DBClient;
-use crate::db::model::{SettingKey, SystemSettings};
+use crate::DBClient;
+use crate::model::{SettingKey, SystemSettings};
 use std::sync::Arc;
 
 pub struct SystemSettingsDBHandler {
