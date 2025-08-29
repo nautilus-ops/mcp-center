@@ -1301,17 +1301,17 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "num_cpus",
+ "regex",
+ "serde",
  "tokio",
  "tokio-util",
+ "toml",
  "tracing",
 ]
 
 [[package]]
 name = "mc-common"
 version = "0.1.0"
-dependencies = [
- "regex",
-]
 
 [[package]]
 name = "mc-db"
@@ -1341,14 +1341,15 @@ name = "mc-registry"
 version = "0.1.0"
 dependencies = [
  "axum",
- "hyper",
  "hyper-rustls",
  "hyper-util",
+ "mc-common",
  "mc-db",
+ "once_cell",
+ "regex",
  "serde",
  "serde_json",
  "tokio",
- "tokio-util",
  "tracing",
  "uuid",
 ]
@@ -1371,15 +1372,12 @@ dependencies = [
  "once_cell",
  "regex",
  "serde",
- "serde_json",
  "tokio",
  "tokio-stream",
  "tokio-util",
- "toml",
  "tower-service",
  "tracing",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

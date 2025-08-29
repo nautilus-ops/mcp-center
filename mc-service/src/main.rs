@@ -5,7 +5,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry;
 use tracing_subscriber::util::SubscriberInitExt;
 
-mod cache;
 mod config;
 mod reverse_proxy;
 mod server;

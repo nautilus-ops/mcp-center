@@ -1,4 +1,3 @@
-use crate::cache::mcp_servers::{Cache, McpServerInfo};
 use crate::reverse_proxy::{ProxyResponse, build_error_stream_response};
 use axum::body::Body;
 use axum::extract::Request;
@@ -10,6 +9,7 @@ use hyper::body::Frame;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
+use mc_registry::cache::mcp_servers::{Cache, McpServerInfo};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::convert::Infallible;

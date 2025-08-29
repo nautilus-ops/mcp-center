@@ -1,6 +1,6 @@
+use crate::event::Event;
 use mc_common::types::HttpScheme;
 use mc_db::{DBClient, McpDBHandler};
-use mc_registry::event::Event;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
