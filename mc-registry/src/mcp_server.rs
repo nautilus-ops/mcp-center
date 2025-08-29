@@ -4,7 +4,6 @@ use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use mc_db::model::{CreateFrom, McpServers, SettingKey};
-use mc_db::{McpDBHandler, SystemSettingsDBHandler};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -17,8 +16,25 @@ pub async fn list_all(
     State(state): State<AppState>,
     Query(params): Query<ListAllRequest>,
 ) -> Result<Json<Response>, (StatusCode, String)> {
-    let mcp_handler = McpDBHandler::new(state.db.clone());
-    let settings_handler = SystemSettingsDBHandler::new(state.db.clone());
+    let mcp_handler = match &state.handlers().mcp_handler {
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Can't get MCP handler not found".to_string(),
+            ));
+        }
+        Some(handler) => handler,
+    };
+
+    let settings_handler = match &state.handlers().system_settings_handler {
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Can't get MCP handler not found".to_string(),
+            ));
+        }
+        Some(handler) => handler,
+    };
 
     let self_address = settings_handler
         .get_system_settings(SettingKey::SelfAddress)
@@ -67,8 +83,17 @@ pub async fn register_mcp_server(
     State(state): State<AppState>,
     Json(server): Json<McpRegisterRequest>,
 ) -> Result<Json<Response>, (StatusCode, String)> {
-    let db_client = state.db.clone();
-    let res = McpDBHandler::new(db_client)
+    let mcp_handler = match &state.handlers().mcp_handler {
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Can't get MCP handler not found".to_string(),
+            ));
+        }
+        Some(handler) => handler,
+    };
+
+    let res = mcp_handler
         .create(&McpServers {
             id: Uuid::new_v4(),
             name: server.name.clone(),

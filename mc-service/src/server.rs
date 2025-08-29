@@ -8,9 +8,9 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use mc_booter::app::application::Application;
 use mc_db::DBClient;
-use mc_registry::AppState;
 use mc_registry::cache::mcp_servers::Cache;
 use mc_registry::event::Event;
+use mc_registry::{AppState, HandlerManager};
 use std::error::Error;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -161,12 +161,17 @@ impl Application for McpCenterServer {
             100,
         ));
 
-        let state = AppState {
-            db: db_client.clone(),
-            event_sender: tx.clone(),
-            https_client: client.clone(),
-            mcp_cache: cache.clone(),
-        };
+        let manager = HandlerManager::new(db_client.clone())
+            .with_mcp_handler()
+            .with_system_settings_handler();
+
+        let state = AppState::new(
+            db_client.clone(),
+            tx.clone(),
+            client.clone(),
+            cache.clone(),
+            manager,
+        );
 
         self.state = Some(state);
 
