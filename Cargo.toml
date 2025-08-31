@@ -1,5 +1,5 @@
 [workspace]
-members = ["mc-booter", "mc-common", "mc-loader", "mc-service"]
+members = ["mc-db", "mc-booter", "mc-common", "mc-loader", "mc-service", "mc-registry"]
 
 [workspace.package]
 version = "0.1.0"

@@ -6,7 +6,8 @@ edition = "2024"
 [dependencies]
 mc-booter = { path = "../mc-booter" }
 mc-common = { path = "../mc-common" }
-mc-loader = { path = "../mc-loader" }
+mc-registry = { path = "../mc-registry" }
+mc-db = { path = "../mc-db" }
 
 tokio = { version = "1.46.1", features = ["full", "tracing"] }
 tokio-util = "0.7.15"
@@ -15,7 +16,6 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 bytes = "1.10.1"
 http = "1.3.1"
 serde = { version = "1.0.219", features = ["derive"] }
-toml = "0.9.4"
 regex = "1.11.1"
 hyper = { version = "1.6.0", features = ["full"] }
 hyper-rustls = "0.27.7"

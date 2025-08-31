@@ -1,23 +1,26 @@
-use crate::cache::mcp_servers::Cache;
 use crate::config::{AppConfig, McpRegistry};
 use crate::reverse_proxy::connection::ConnectionService;
 use crate::reverse_proxy::message::MessageService;
 use axum::Router;
+use axum::routing::{get, post};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use mc_booter::app::application::Application;
-use mc_common::utils;
-use mc_loader::external_api::ExternalApiLoader;
-use mc_loader::local::LocalFileLoader;
+use mc_db::DBClient;
+use mc_registry::cache::mcp_servers::Cache;
+use mc_registry::event::Event;
+use mc_registry::{AppState, HandlerManager};
 use std::error::Error;
-use std::fs;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
+use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
 pub enum Registry {
+    #[allow(dead_code)]
     Memory(String),
+    #[allow(dead_code)]
     ExternalAPI(ExternalApiConfig),
 }
 
@@ -28,7 +31,9 @@ impl Default for Registry {
 }
 
 pub struct ExternalApiConfig {
+    #[allow(dead_code)]
     pub url: String,
+    #[allow(dead_code)]
     pub authorization: Option<String>,
 }
 
@@ -41,54 +46,49 @@ struct Bootstrap {
 pub struct McpCenterServer {
     bootstrap: Bootstrap,
     config: AppConfig,
+    state: Option<AppState>,
 }
 impl McpCenterServer {
     pub fn new() -> Self {
         Self {
             bootstrap: Default::default(),
             config: Default::default(),
+            state: None,
         }
     }
 
-    fn start(&self, shutdown_signal: CancellationToken, rt: Runtime) -> Result<(), Box<dyn Error>> {
-        let handler: Box<dyn mc_loader::Loader> = match &self.bootstrap.registry {
-            Registry::Memory(path) => Box::new(LocalFileLoader::new(path.clone())),
-            Registry::ExternalAPI(config) => Box::new(ExternalApiLoader::new(
-                config.url.as_str(),
-                config.authorization.clone(),
-            )),
-        };
+    fn start(
+        &self,
+        shutdown_signal: CancellationToken,
+        runtime: Arc<Runtime>,
+    ) -> Result<(), Box<dyn Error>> {
+        let state = self.state.clone().unwrap();
 
-        let runtime = Arc::new(rt);
-
-        let cache = Arc::new(Cache::new(Arc::new(handler), runtime.clone(), 100));
-
-        let https = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .unwrap()
-            .https_or_http()
-            .enable_http1()
-            .build();
-
-        let client = Arc::new(Client::builder(TokioExecutor::new()).build(https));
-
+        // register axum routers
         let app = Router::new()
             .route_service(
                 "/proxy/connect/{name}/{tag}",
-                ConnectionService::new(client.clone(), cache.clone()),
+                ConnectionService::new(state.https_client.clone(), state.mcp_cache.clone()),
             )
             .route_service(
                 "/proxy/message/{name}/{tag}/{*subPath}",
-                MessageService::new(client.clone(), cache.clone()),
-            );
+                MessageService::new(state.https_client.clone(), state.mcp_cache.clone()),
+            )
+            .route("/api/registry/mcp-server", get(mc_registry::list_all))
+            .route(
+                "/api/registry/mcp-server",
+                post(mc_registry::register_mcp_server),
+            )
+            .with_state(state);
 
+        // starting axum service
         runtime.block_on(async move {
             let listener =
                 tokio::net::TcpListener::bind(format!("0.0.0.0:{}", self.bootstrap.port))
                     .await
                     .unwrap();
 
-            let shutdown_signal = || async move {
+            let shutdown = || async move {
                 shutdown_signal.cancelled().await;
                 tracing::info!("Shutting down...");
             };
@@ -96,7 +96,7 @@ impl McpCenterServer {
             tracing::info!("starting HTTP server on port {}", self.bootstrap.port);
 
             axum::serve(listener, app)
-                .with_graceful_shutdown(shutdown_signal())
+                .with_graceful_shutdown(shutdown())
                 .await
                 .unwrap();
         });
@@ -105,27 +105,17 @@ impl McpCenterServer {
 }
 
 impl Application for McpCenterServer {
+    type Config = AppConfig;
+
     fn new() -> Self {
         Self::new()
     }
 
-    fn prepare(&mut self, path: String) -> Result<(), Box<dyn Error>> {
-        tracing::info!("Preparing Censor application with config: {}", path);
-
-        let mut content = fs::read_to_string(path.clone()).map_err(|e| {
-            tracing::error!("Failed to read config file {}: {}", path, e);
-            e
-        })?;
-
-        content = utils::replace_env_variables(content);
-
-        let config: AppConfig = toml::from_str(&content).map_err(|e| {
-            tracing::error!("Failed to parse TOML config: {}", e);
-            e
-        })?;
-
-        tracing::debug!("The application config: \n{:?}", config);
-
+    fn prepare(
+        &mut self,
+        config: Self::Config,
+        runtime: Arc<Runtime>,
+    ) -> Result<(), Box<dyn Error>> {
         self.config = config.clone();
 
         self.bootstrap.port = config.mcp_center.http_port;
@@ -137,11 +127,63 @@ impl Application for McpCenterServer {
             McpRegistry::External { url, token } => build_external_api_registry(url, token),
         };
 
+        let (tx, _) = broadcast::channel::<Event>(100);
+
+        let https = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .unwrap()
+            .https_or_http()
+            .enable_http1()
+            .build();
+
+        let client = Arc::new(Client::builder(TokioExecutor::new()).build(https));
+
+        let host = &self.config.postgres.host;
+        let port = self.config.postgres.port;
+        let username = &self.config.postgres.username;
+        let database = &self.config.postgres.database;
+        let password = &self.config.postgres.password;
+        let max_connection = self.config.postgres.max_connection;
+
+        let db_client = runtime.block_on(async move {
+            DBClient::create(host, port, username, password, database, max_connection)
+                .await.inspect_err(|_| {
+                tracing::error!("Error creating database client, host: {host}, port: {port}, user: {username}, database: {database}, max_connection: {max_connection}");
+            }).unwrap()
+        });
+        let db_client = Arc::new(db_client);
+
+        // mcp cache for reverse proxy, load mcp servers from postgres
+        let cache = Arc::new(Cache::new(
+            db_client.clone(),
+            tx.subscribe(),
+            runtime.clone(),
+            100,
+        ));
+
+        let manager = HandlerManager::new(db_client.clone())
+            .with_mcp_handler()
+            .with_system_settings_handler();
+
+        let state = AppState::new(
+            db_client.clone(),
+            tx.clone(),
+            client.clone(),
+            cache.clone(),
+            manager,
+        );
+
+        self.state = Some(state);
+
         Ok(())
     }
 
-    fn run(&mut self, shutdown: CancellationToken, rt: Runtime) -> Result<(), Box<dyn Error>> {
-        self.start(shutdown, rt)?;
+    fn run(
+        &mut self,
+        shutdown: CancellationToken,
+        runtime: Arc<Runtime>,
+    ) -> Result<(), Box<dyn Error>> {
+        self.start(shutdown, runtime)?;
         Ok(())
     }
 }
