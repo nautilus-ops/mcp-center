@@ -1,9 +1,11 @@
 mod mcp_handler;
 pub mod model;
 mod settings_handler;
+mod apikey;
 
 pub use mcp_handler::*;
 pub use settings_handler::*;
+pub use apikey::*;
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};

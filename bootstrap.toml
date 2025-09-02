@@ -1,5 +1,6 @@
 [mcp_center]
 http_port = "${HTTP_PORT:5432}"
+admin_token = "${MCP_ADMIN_TOKEN}"
 
 [mcp_registry]
 type = "${REGISTRY_TYPE:memory}"

@@ -14,6 +14,8 @@ pub struct AppConfig {
 pub struct McpCenter {
     #[serde(default)]
     pub http_port: u16,
+    #[serde(default)]
+    pub admin_token: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
