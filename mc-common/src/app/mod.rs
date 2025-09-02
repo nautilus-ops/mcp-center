@@ -1,16 +1,16 @@
-pub mod event;
 pub mod cache;
+pub mod event;
 
-use std::sync::Arc;
+use crate::app::cache::Cache;
+use crate::app::event::Event;
 use axum::body::Body;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
-use serde::{Deserialize, Serialize};
-use tokio::sync::broadcast::Sender;
 use mc_db::DBClient;
-use crate::app::cache::Cache;
-use crate::app::event::Event;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::broadcast::Sender;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -64,11 +64,12 @@ impl HandlerManager {
         self
     }
     pub fn with_system_settings_handler(mut self) -> Self {
-        self.system_settings_handler =
-            Some(Arc::new(mc_db::SystemSettingsDBHandler::new(self.db.clone())));
+        self.system_settings_handler = Some(Arc::new(mc_db::SystemSettingsDBHandler::new(
+            self.db.clone(),
+        )));
         self
     }
-    
+
     pub fn with_api_keys_handler(mut self) -> Self {
         self.api_keys_handler = Some(Arc::new(mc_db::ApiKeyDBHandler::new(self.db.clone())));
         self

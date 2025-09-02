@@ -1,12 +1,9 @@
 use crate::config::{AppConfig, McpRegistry};
 use crate::reverse_proxy;
-use crate::reverse_proxy::connection::ConnectionService;
-use crate::reverse_proxy::message::MessageService;
 use axum::extract::{Request, State};
+use axum::middleware;
 use axum::middleware::Next;
 use axum::response::Response;
-use axum::routing::{get, post};
-use axum::{Router, middleware};
 use http::StatusCode;
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::client::legacy::Client;
@@ -209,11 +206,48 @@ async fn authorization(
     State((config, state)): State<(AppConfig, AppState)>,
     req: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, (StatusCode, String)> {
     if let Some(key) = req.headers().get(http::header::AUTHORIZATION) {
-        if key == config.mcp_center.admin_token.as_str() {
+        let mut apikey = key.to_str().unwrap();
+        apikey = apikey.strip_prefix("Bearer ").unwrap_or(apikey);
+
+        tracing::debug!("Authorization header set to: {apikey}");
+
+        if apikey == config.mcp_center.admin_token.as_str() {
             return Ok(next.run(req).await);
         }
+        let handler = match &state.handlers().api_keys_handler {
+            None => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    String::from("no api key handler found"),
+                ));
+            }
+            Some(handler) => handler,
+        };
+
+        let res = match handler.find(apikey).await {
+            Ok(_) => Ok(next.run(req).await),
+            Err(sqlx::Error::RowNotFound) => {
+                tracing::error!("The API key is not permitted.");
+                Err((
+                    StatusCode::UNAUTHORIZED,
+                    String::from("The API key is not permitted."),
+                ))
+            }
+            Err(err) => {
+                tracing::error!("failed to select api key: {}", err);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    String::from("Failed to select api key"),
+                ))
+            }
+        };
+        return res;
     }
-    Err(StatusCode::UNAUTHORIZED)
+    tracing::error!("Authorization header not found");
+    Err((
+        StatusCode::UNAUTHORIZED,
+        String::from("Authorization header not found"),
+    ))
 }

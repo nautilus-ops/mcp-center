@@ -1,7 +1,6 @@
 mod mcp_server;
 
 use axum::routing::{get, post};
-use axum::{Router, middleware};
 use mc_common::app::AppState;
 use mc_common::router;
 pub use mcp_server::*;

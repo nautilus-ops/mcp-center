@@ -1,10 +1,15 @@
-use crate::app::AppState;
 use axum::Router;
 
 pub type RouterHandler<T> = Box<dyn Fn(Router<T>) -> Router<T> + Send + Sync>;
 
 pub struct RouterBuilder<S: Clone + Send + Sync + 'static> {
     router: Router<S>,
+}
+
+impl<S: Clone + Send + Sync + 'static> Default for RouterBuilder<S> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<S: Clone + Send + Sync + 'static> RouterBuilder<S> {

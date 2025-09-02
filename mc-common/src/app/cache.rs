@@ -1,4 +1,5 @@
-
+use crate::app::event::Event;
+use crate::types::HttpScheme;
 use mc_db::{DBClient, McpDBHandler};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -11,8 +12,6 @@ use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::sync::broadcast::Receiver;
 use tokio::time::interval;
-use crate::app::event::Event;
-use crate::types::HttpScheme;
 
 static REGEX_ENDPOINT: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^(?P<scheme>https?)://(?P<host>[^/:]+)(?::(?P<port>\d+))?(?P<path>/.*)?$").unwrap()

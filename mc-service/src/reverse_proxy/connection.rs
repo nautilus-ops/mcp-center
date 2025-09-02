@@ -9,6 +9,7 @@ use hyper::body::Frame;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
+use mc_common::app::cache::Cache;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::convert::Infallible;
@@ -18,7 +19,6 @@ use std::task::Poll;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tower_service::Service;
-use mc_common::app::cache::Cache;
 
 static REGEX_CONNECT_ROUTER: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^/proxy/connect/([^/]+)/([^/]+)(/.*)?$").unwrap());
