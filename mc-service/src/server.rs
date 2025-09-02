@@ -1,4 +1,5 @@
 use crate::config::{AppConfig, McpRegistry};
+use crate::reverse_proxy;
 use crate::reverse_proxy::connection::ConnectionService;
 use crate::reverse_proxy::message::MessageService;
 use axum::extract::{Request, State};
@@ -14,6 +15,8 @@ use mc_booter::app::application::Application;
 use mc_common::app::cache::Cache;
 use mc_common::app::event::Event;
 use mc_common::app::{AppState, HandlerManager};
+use mc_common::router;
+use mc_common::router::RouterHandler;
 use mc_db::DBClient;
 use std::error::Error;
 use std::sync::Arc;
@@ -68,26 +71,15 @@ impl McpCenterServer {
     ) -> Result<(), Box<dyn Error>> {
         let state = self.state.clone().unwrap();
 
-        // register axum routers
-        let app = Router::new()
-            .route_service(
-                "/proxy/connect/{name}/{tag}",
-                ConnectionService::new(state.https_client.clone(), state.mcp_cache.clone()),
-            )
-            .route_service(
-                "/proxy/message/{name}/{tag}/{*subPath}",
-                MessageService::new(state.https_client.clone(), state.mcp_cache.clone()),
-            )
-            .route("/api/registry/mcp-server", get(mc_registry::list_all))
-            .route(
-                "/api/registry/mcp-server",
-                post(mc_registry::register_mcp_server),
-            )
-            .layer(middleware::from_fn_with_state(
-                (self.config.clone(), state.clone()),
-                check_api_key,
+        let builder = router::RouterBuilder::<AppState>::new()
+            .with_register(reverse_proxy::register_router(
+                state.https_client.clone(),
+                state.mcp_cache.clone(),
             ))
-            .with_state(state);
+            .with_register(mc_registry::register_router())
+            .with_layer(layer_authorization(self.config.clone(), state.clone()));
+
+        let app = builder.build(state);
 
         // starting axum service
         runtime.block_on(async move {
@@ -204,7 +196,16 @@ fn build_external_api_registry(url: String, token: Option<String>) -> Registry {
     Registry::ExternalAPI(config)
 }
 
-async fn check_api_key(
+fn layer_authorization(config: AppConfig, state: AppState) -> RouterHandler<AppState> {
+    Box::new(move |router| {
+        router.layer(middleware::from_fn_with_state(
+            (config.clone(), state.clone()),
+            authorization,
+        ))
+    })
+}
+
+async fn authorization(
     State((config, state)): State<(AppConfig, AppState)>,
     req: Request,
     next: Next,
