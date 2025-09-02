@@ -1,8 +1,8 @@
-use crate::event::Event;
-use crate::{AppState, Response};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
+use mc_common::app::event::Event;
+use mc_common::app::{AppState, Response};
 use mc_db::model::{CreateFrom, McpServers, SettingKey};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

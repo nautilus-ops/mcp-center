@@ -4,3 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+mc-db = { path = "../mc-db" }
+
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.143"
+hyper-rustls = "0.27.7"
+hyper-util = { version = "0.1.16", features = ["client", "client-legacy"] }
+axum = "0.8.4"
+once_cell = "1.21.3"
+regex = "1.11.2"
+tokio = "1.47.1"
+tracing = "0.1.41"

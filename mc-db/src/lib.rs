@@ -1,7 +1,9 @@
+mod apikey;
 mod mcp_handler;
 pub mod model;
 mod settings_handler;
 
+pub use apikey::*;
 pub use mcp_handler::*;
 pub use settings_handler::*;
 

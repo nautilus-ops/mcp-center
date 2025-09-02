@@ -9,7 +9,7 @@ use hyper::body::Frame;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
-use mc_registry::cache::mcp_servers::Cache;
+use mc_common::app::cache::Cache;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::convert::Infallible;

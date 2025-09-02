@@ -1,5 +1,5 @@
-use crate::event::Event;
-use mc_common::types::HttpScheme;
+use crate::app::event::Event;
+use crate::types::HttpScheme;
 use mc_db::{DBClient, McpDBHandler};
 use once_cell::sync::Lazy;
 use regex::Regex;
