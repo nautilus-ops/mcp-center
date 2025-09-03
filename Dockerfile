@@ -18,7 +18,9 @@ COPY Cargo.toml Cargo.lock ./
 
 COPY mc-booter ./mc-booter
 COPY mc-common ./mc-common
-COPY mc-register ./mc-register
+COPY mc-db ./mc-db
+COPY mc-loader ./mc-loader
+COPY mc-registry ./mc-registry
 COPY mc-service ./mc-service
 
 RUN cargo build -p mc-service --release
