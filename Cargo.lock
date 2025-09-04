@@ -1322,6 +1322,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tower-http",
  "tracing",
 ]
 
@@ -1353,12 +1354,8 @@ name = "mc-registry"
 version = "0.1.0"
 dependencies = [
  "axum",
- "hyper-rustls",
- "hyper-util",
  "mc-common",
  "mc-db",
- "once_cell",
- "regex",
  "serde",
  "serde_json",
  "tokio",
@@ -1381,6 +1378,7 @@ dependencies = [
  "mc-common",
  "mc-db",
  "mc-registry",
+ "mc-token",
  "once_cell",
  "regex",
  "serde",
@@ -1391,6 +1389,20 @@ dependencies = [
  "tower-service",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "mc-token"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "mc-common",
+ "mc-db",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
