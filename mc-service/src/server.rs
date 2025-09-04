@@ -1,9 +1,10 @@
 use crate::config::{AppConfig, McpRegistry};
 use crate::reverse_proxy;
 use axum::extract::{Request, State};
-use axum::middleware;
 use axum::middleware::Next;
 use axum::response::Response;
+use axum::routing::{get, post};
+use axum::{Json, middleware};
 use http::StatusCode;
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::client::legacy::Client;
@@ -15,6 +16,7 @@ use mc_common::app::{AppState, HandlerManager};
 use mc_common::router;
 use mc_common::router::RouterHandler;
 use mc_db::DBClient;
+use mc_registry::{McpRegisterRequest, list_all, register_mcp_server};
 use std::error::Error;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -74,6 +76,7 @@ impl McpCenterServer {
                 state.mcp_cache.clone(),
             ))
             .with_register(mc_registry::register_router())
+            .with_register(mc_token::register_router())
             .with_layer(layer_authorization(self.config.clone(), state.clone()));
 
         let app = builder.build(state);
@@ -207,6 +210,10 @@ async fn authorization(
     req: Request,
     next: Next,
 ) -> Result<Response, (StatusCode, String)> {
+    if req.uri() == "/api/user/admin/login" {
+        return Ok(next.run(req).await);
+    }
+
     if let Some(key) = req.headers().get(http::header::AUTHORIZATION) {
         let mut apikey = key.to_str().unwrap();
         apikey = apikey.strip_prefix("Bearer ").unwrap_or(apikey);

@@ -8,6 +8,7 @@ mc-booter = { path = "../mc-booter" }
 mc-common = { path = "../mc-common" }
 mc-registry = { path = "../mc-registry" }
 mc-db = { path = "../mc-db" }
+mc-token = { path = "../mc-token" }
 
 tokio = { version = "1.46.1", features = ["full", "tracing"] }
 tokio-util = "0.7.15"

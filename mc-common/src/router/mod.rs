@@ -1,4 +1,5 @@
 use axum::Router;
+use tower_http::cors::CorsLayer;
 
 pub type RouterHandler<T> = Box<dyn Fn(Router<T>) -> Router<T> + Send + Sync>;
 
@@ -29,6 +30,6 @@ impl<S: Clone + Send + Sync + 'static> RouterBuilder<S> {
 
     pub fn build(self, state: S) -> Router {
         let router = self.router.clone();
-        router.with_state(state)
+        router.layer(CorsLayer::permissive()).with_state(state)
     }
 }
