@@ -44,6 +44,33 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          env:
+            {{- if .Values.postgresql.enabled }}
+            - name: POSTGRES_HOST
+              value: {{ include "mcp-center.postgresql.fullname" . }}
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USERNAME
+              value: {{ .Values.postgresql.auth.username }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mcp-center.postgresql.fullname" . }}
+                  key: postgresql-password
+            - name: POSTGRES_DATABASE
+              value: {{ .Values.postgresql.auth.database }}
+            {{- else }}
+            - name: POSTGRES_HOST
+              value: {{ .Values.externalPostgresql.host }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.externalPostgresql.port | quote }}
+            - name: POSTGRES_USERNAME
+              value: {{ .Values.externalPostgresql.username }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.externalPostgresql.password }}
+            - name: POSTGRES_DATABASE
+              value: {{ .Values.externalPostgresql.database }}
+            {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

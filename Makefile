@@ -28,7 +28,7 @@ build-push-image:
 		--platform $(PLATFORM) \
 		--tag $(IMAGE_REGISTER)/mcp-center:$(shell grep '^version = ' Cargo.toml | cut -d'"' -f2)-$(shell date +%Y%m%d%H%M)-$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown") \
 		$(if $(filter true,$(RELEASE)),--tag $(IMAGE_REGISTER)/mcp-center:latest) \
-		$(if $(filter true,$(RELEASE)),--tag $(IMAGE_REGISTER)/mcp-center:$(shell grep '^version = ' Cargo.toml | cut -d'"' -f2)-release) \
+		$(if $(filter true,$(RELEASE)),--tag $(IMAGE_REGISTER)/mcp-center:$(shell grep '^version = ' Cargo.toml | cut -d'"' -f2)) \
 		--push \
 		.
 

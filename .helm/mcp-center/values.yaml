@@ -11,7 +11,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "release"
+  tag: "latest"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -131,3 +131,40 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# PostgreSQL Configuration
+# Set to false if you want to use an external PostgreSQL instance
+postgresql:
+  enabled: false
+  global:
+    security:
+      allowInsecureImages: true
+  image:
+    registry: m.daocloud.io/docker.io
+    repository: bitnami/postgresql
+    tag: "17.6.0"
+  auth:
+    postgresPassword: "postgres"
+    username: "mcpcenter"
+    password: "mcpcenter"
+    database: "mcpcenter"
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+# External PostgreSQL Configuration
+# Use these settings when postgresql.enabled is false
+externalPostgresql:
+  host: "your-postgres-host"
+  port: 5432
+  username: "mcpcenter"
+  password: "your-password"
+  database: "mcpcenter"
