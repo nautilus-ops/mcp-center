@@ -7,9 +7,11 @@ pub use apikey::*;
 pub use mcp_handler::*;
 pub use settings_handler::*;
 
+use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 use std::error::Error;
+use std::path::PathBuf;
 
 #[derive(Clone)]
 pub struct DBClient {
@@ -34,5 +36,11 @@ impl DBClient {
             .await?;
 
         Ok(DBClient { pool })
+    }
+
+    pub async fn migrate(&self, migrate: PathBuf) -> Result<(), Box<dyn Error>> {
+        let migrator = Migrator::new(migrate).await?;
+        migrator.run(&self.pool).await?;
+        Ok(())
     }
 }

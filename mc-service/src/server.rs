@@ -1,3 +1,4 @@
+use std::env;
 use crate::config::{AppConfig, McpRegistry};
 use crate::reverse_proxy;
 use axum::extract::{Request, State};
@@ -144,11 +145,18 @@ impl Application for McpCenterServer {
         let max_connection = self.config.postgres.max_connection;
 
         let db_client = runtime.block_on(async move {
-            DBClient::create(host, port, username, password, database, max_connection)
+            let c = DBClient::create(host, port, username, password, database, max_connection)
                 .await.inspect_err(|_| {
                 tracing::error!("Error creating database client, host: {host}, port: {port}, user: {username}, database: {database}, max_connection: {max_connection}");
-            }).unwrap()
+            }).unwrap();
+
+            let migration = env::current_dir().unwrap().join(".migration");
+
+            c.migrate(migration).await.unwrap();
+            tracing::info!("Database migration successful");
+            c
         });
+
         let db_client = Arc::new(db_client);
 
         // mcp cache for reverse proxy, load mcp servers from postgres
