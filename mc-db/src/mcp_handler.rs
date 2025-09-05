@@ -12,9 +12,30 @@ impl McpDBHandler {
     }
 
     pub async fn list_all(&self) -> Result<Vec<McpServers>, sqlx::Error> {
-        sqlx::query_as::<_, McpServers>("SELECT * FROM tb_mcp_servers")
+        sqlx::query_as::<_, McpServers>("SELECT * FROM tb_mcp_servers ORDER BY id")
             .fetch_all(&self.client.pool)
             .await
+    }
+
+    pub async fn list_with_limit(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<McpServers>, sqlx::Error> {
+        sqlx::query_as::<_, McpServers>(
+            "SELECT * FROM tb_mcp_servers ORDER BY id LIMIT $1 OFFSET $2",
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.client.pool)
+        .await
+    }
+
+    pub async fn count(&self) -> Result<i64, sqlx::Error> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tb_mcp_servers")
+            .fetch_one(&self.client.pool)
+            .await?;
+        Ok(count)
     }
 
     pub async fn create(&self, server: &McpServers) -> Result<McpServers, sqlx::Error> {

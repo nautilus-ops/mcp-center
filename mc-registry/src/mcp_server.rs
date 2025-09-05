@@ -10,12 +10,30 @@ use uuid::Uuid;
 #[derive(Deserialize, Debug)]
 pub struct ListAllRequest {
     use_raw_endpoint: Option<bool>,
+    page_size: Option<i64>,
+    page_num: Option<i64>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct ListAllResponse {
+    servers: Vec<McpServers>,
+    count: i64,
 }
 
 pub async fn list_all(
     State(state): State<AppState>,
-    Query(params): Query<ListAllRequest>,
+    Query(request): Query<ListAllRequest>,
 ) -> Result<Json<Response>, (StatusCode, String)> {
+    if request.page_size.is_some() ^ request.page_num.is_some() {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Both page_size and page_num must be provided together or omitted together".to_string(),
+        ));
+    }
+
+    let page_size = request.page_size.unwrap_or(0);
+    let page_num = request.page_num.unwrap_or(0);
+
     let mcp_handler = match &state.handlers().mcp_handler {
         None => {
             return Err((
@@ -40,15 +58,30 @@ pub async fn list_all(
         .get_system_settings(SettingKey::SelfAddress)
         .await;
 
-    let mut servers = mcp_handler.list_all().await.map_err(|e| {
-        tracing::error!("Failed to list mcp servers {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to list mcp servers".to_string(),
-        )
-    })?;
+    // select mcp servers
+    let mut servers = if page_size > 0 && page_num > 0 {
+        mcp_handler
+            .list_with_limit(page_size, (page_num - 1) * page_size)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to list mcp servers {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to list mcp servers".to_string(),
+                )
+            })?
+    } else {
+        mcp_handler.list_all().await.map_err(|e| {
+            tracing::error!("Failed to list mcp servers {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to list mcp servers".to_string(),
+            )
+        })?
+    };
 
-    if params.use_raw_endpoint.is_none() || !params.use_raw_endpoint.unwrap() {
+    // replace endpoint host
+    if request.use_raw_endpoint.is_none() || !request.use_raw_endpoint.unwrap() {
         servers.iter_mut().for_each(|server| {
             server.endpoint = format!(
                 "{self_address}/proxy/connect/{}/{}",
@@ -57,7 +90,15 @@ pub async fn list_all(
         })
     }
 
-    let data = serde_json::to_value(servers).map_err(|e| {
+    let count = mcp_handler.count().await.map_err(|e| {
+        tracing::error!("Failed to count mcp servers {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to count mcp servers".to_string(),
+        )
+    })?;
+
+    let data = serde_json::to_value(ListAllResponse { servers, count }).map_err(|e| {
         tracing::error!("Failed to parse mcp servers {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
