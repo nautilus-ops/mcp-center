@@ -116,21 +116,16 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
-# MCP Servers Configuration
-# This allows you to customize the mcp_servers.toml configuration
-# Example:
-# mcpServersConfig: |
-#   [[mcp_servers]]
-#   endpoint = "http://127.0.0.1:8080/sse"
-#   name = "example"
-#   tag = "1.0.0"
-mcpServersConfig: ""
 
 nodeSelector: {}
 
 tolerations: []
 
 affinity: {}
+
+# MCP Admin Token Configuration
+# A 32-character random string for MCP admin authentication
+mcpAdminToken: "{{ randAlphaNum 32 }}"
 
 # PostgreSQL Configuration
 # Set to false if you want to use an external PostgreSQL instance
@@ -166,5 +161,5 @@ externalPostgresql:
   host: "your-postgres-host"
   port: 5432
   username: "mcpcenter"
-  password: "your-password"
+  password: "{{ randAlphaNum 16 }}"  # Auto-generated 16-character password
   database: "mcpcenter"

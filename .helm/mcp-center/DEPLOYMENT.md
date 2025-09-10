@@ -49,8 +49,14 @@ When `postgresql.enabled: false`, configure the following parameters:
 - `externalPostgresql.host`: PostgreSQL server address
 - `externalPostgresql.port`: PostgreSQL port (default 5432)
 - `externalPostgresql.username`: Database username
-- `externalPostgresql.password`: Database password
+- `externalPostgresql.password`: Database password (stored securely in Kubernetes Secret)
 - `externalPostgresql.database`: Database name
+
+### MCP Admin Token Configuration
+
+- `mcpAdminToken`: 32-character random string for MCP admin authentication
+  - Default: Auto-generated 32-character random string
+  - Custom: You can set your own token in values.yaml
 
 ## Environment Variables
 
@@ -61,6 +67,7 @@ The application will automatically receive the following environment variables:
 - `POSTGRES_USERNAME`: Database username
 - `POSTGRES_PASSWORD`: Database password
 - `POSTGRES_DATABASE`: Database name
+- `MCP_ADMIN_TOKEN`: 32-character random string for admin authentication
 
 ## Troubleshooting
 
