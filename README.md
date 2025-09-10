@@ -55,7 +55,7 @@ docker run -d \
 
 ### Using Helm
 
-Please see [here](docs/QUICK_START.md) to deploy with helm
+Please see [here](.helm/mcp-center/DEPLOYMENT.md) to deploy with helm
 
 ### From Source
 
