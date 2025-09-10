@@ -1,11 +1,5 @@
 # Quick Start
 
-## 📋 Table of Contents
-
-- [Quick Deployment](#quick-deployment)
-- [Configure MCP Servers](#configure-mcp-servers)
-- [Connect to MCP Servers](#connect-to-mcp-servers)
-
 ## 🚀 Quick Deployment
 
 ### Method 1: Using Docker (Recommended)
@@ -14,13 +8,11 @@
 # 1. Pull the latest image
 docker pull nautilusops/mcp-center:latest
 
-
-
 # 2. Start the container
 docker run -d \
   --name mcp-center \
   -p 5432:5432 \
-  -v $(pwd)/mcp_servers.toml:/app/mcp_servers.toml \
+  -e MCP_ADMIN_TOKEN=your-custom-token \
   -e POSTGRES_HOST=your-postgres-host \
   -e POSTGRES_PORT=your-postgres-port
   -e POSTGRES_USERNAME=your-postgres-username
@@ -31,107 +23,84 @@ docker run -d \
 
 ### Method 2: Using Helm (Kubernetes)
 
-
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/mcp-center.git
-cd mcp-center
-
-# 2. Install MCP Center
-helm install mcp-center .helm/mcp-center
-
-# 3. Verify deployment
-kubectl get pods -l app=mcp-center
-```
-
-### Method 3: Build from Source
+#### Option 1: Using Built-in PostgreSQL (Recommended for Development/Testing)
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/mcp-center.git
-cd mcp-center
-
-# 2. Build the project
-cargo build --release
-
-# 3. Run the application
-./target/release/mcp-center run --config bootstrap.toml
+# Deploy with default configuration (includes PostgreSQL)
+helm install mcp-center . --create-namespace --namespace mcp-center
 ```
 
-## ⚙️ Configure MCP Servers
+#### Option 2: Using External PostgreSQL (Recommended for Production)
 
-MCP Center supports two registration methods: local memory configuration and external API.
-
-### Local Memory Configuration
-
-1. **Create configuration file** `mcp_servers.toml`:
-
-```toml
-# Example MCP server configuration
-[[mcp_servers]]
-endpoint = "http://127.0.0.1:8080/sse"
-name = "example-server"
-tag = "1.0.0"
-transport_type = "sse"
-# Access URL: http://{proxy-host}:5432/connect/example-server/1.0.0
-
-[[mcp_servers]]
-endpoint = "http://127.0.0.1:8888/mcp"
-name = "example-server"
-tag = "2.0.0"
-transport_type = "streamable"
-# Access URL: http://{proxy-host}:5432/connect/example-server/2.0.0
-
-[[mcp_servers]]
-endpoint = "http://another-server:8080/sse"
-name = "production-server"
-tag = "stable"
-transport_type = "sse"
-# Access URL: http://{proxy-host}:5432/connect/production-server/stable
-```
-
-2. **Set environment variables**:
-
+1. Copy the example configuration file:
 ```bash
-export REGISTRY_TYPE=memory
+cp values-custom.yaml my-values.yaml
 ```
 
-### External API Configuration
+2. Edit the configuration file and set your PostgreSQL connection information:
+```yaml
+postgresql:
+  enabled: false
 
-1. **Set environment variables**:
+externalPostgresql:
+  host: "your-postgres-host.example.com"
+  port: 5432
+  username: "mcpcenter"
+  password: "your-secure-password"
+  database: "mcpcenter"
+```
 
+3. Deploy with custom configuration:
 ```bash
-export REGISTRY_TYPE=external_api
-export EXTERNAL_API=https://your-registry-api.com/api/mcp/servers
-export EXTERNAL_AUTHORIZATION=your-api-token
+helm install mcp-center . -f my-values.yaml --create-namespace --namespace mcp-center
 ```
 
-2. **API Response Format**:
+### Configuration
 
-Your API must return JSON responses in the following format:
+#### PostgreSQL Configuration
 
-```json
-{
-    "data": [
-        {
-            "endpoint": "http://127.0.0.1:8080/sse",
-            "name": "example-server",
-            "version": "1.0.0",
-            "tag": "1.0.0",
-            "transport_type": "sse"
-        },
-        {
-            "endpoint": "http://another-server:8080/mcp",
-            "name": "production-server",
-            "tag": "stable",
-            "transport_type": "streamable"
-        }
-    ]
-}
-```
+- `postgresql.enabled`: Whether to enable built-in PostgreSQL
+    - `true`: Use built-in PostgreSQL (requires storage class support)
+    - `false`: Use external PostgreSQL
 
-> **Note**: When both `version` and `tag` fields exist, the `tag` field takes precedence.
+#### External PostgreSQL Configuration
+
+When `postgresql.enabled: false`, configure the following parameters:
+
+- `externalPostgresql.host`: PostgreSQL server address
+- `externalPostgresql.port`: PostgreSQL port (default 5432)
+- `externalPostgresql.username`: Database username
+- `externalPostgresql.password`: Database password (stored securely in Kubernetes Secret)
+- `externalPostgresql.database`: Database name
+
+#### MCP Admin Token Configuration
+
+- `mcpAdminToken`: 32-character random string for MCP admin authentication
+    - Default: Auto-generated 32-character random string
+    - Custom: You can set your own token in values.yaml
+
+### Environment Variables
+
+The application will automatically receive the following environment variables:
+
+- `POSTGRES_HOST`: PostgreSQL host address
+- `POSTGRES_PORT`: PostgreSQL port
+- `POSTGRES_USERNAME`: Database username
+- `POSTGRES_PASSWORD`: Database password
+- `POSTGRES_DATABASE`: Database name
+- `MCP_ADMIN_TOKEN`: 32-character random string for admin authentication
+
+### Troubleshooting
+
+#### Built-in PostgreSQL Cannot Start
+- Check if the cluster has available storage classes
+- Check if there is sufficient storage space
+- View Pod logs: `kubectl logs -n mcp-center <pod-name>`
+
+#### External PostgreSQL Connection Failed
+- Check network connectivity
+- Verify if PostgreSQL service is accessible
+- Check if username, password, and database name are correct
 
 ## 🔗 Connect to MCP Servers
 
@@ -148,13 +117,13 @@ import (
 func main() {
     // Using SSE transport
     transport := mcp.NewSSEClientTransport(
-        "http://localhost:5432/connect/example-server/1.0.0",
+        "http://localhost:5432/proxy/connect/example-server/1.0.0",
         nil,
     )
     
     // Using Streamable transport
     transport := mcp.NewStreamableClientTransport(
-        "http://localhost:5432/connect/example-server/2.0.0",
+        "http://localhost:5432/proxy/connect/example-server/2.0.0",
         nil,
     )
     
@@ -180,5 +149,5 @@ func main() {
 
 ```bash
 # Test connection
-curl -v http://localhost:5432/connect/example-server/1.0.0
+curl -v http://localhost:5432/proxy/connect/example-server/1.0.0
 ```

@@ -28,130 +28,88 @@ This approach improves maintainability, provides a foundation for future feature
 - [x] **MCP SSE Transport Proxy** - Server-Sent Events transport support
 - [x] **MCP Streamable Transport Proxy** - Streamable transport protocol support
 - [x] **Multiple Registry Types** - Support for memory-based and external API registries
-- [x] **High Performance** - Built with [Pingora](https://github.com/cloudflare/pingora) proxy framework for optimal performance
+- [x] **High Performance** - Built with Axum proxy framework for optimal performance
 - [x] **Kubernetes Ready** - Complete Helm chart for easy deployment
 
 ## Quick Start
 
-visit [here](docs/QUICK_START.md) to quick start
-
 ### Using Docker
 
+
 ```bash
-# Pull the image
+# 1. Pull the latest image
 docker pull nautilusops/mcp-center:latest
 
-# Run with default configuration
-docker run -p 5432:5432 nautilusops/mcp-center:latest
-
-# Run with custom configuration
-docker run -p 5432:5432 \
-  -v $(pwd)/mcp_servers.toml:/app/mcp_servers.toml \
+# 2. Start the container
+docker run -d \
+  --name mcp-center \
+  -p 5432:5432 \
+  -e MCP_ADMIN_TOKEN=your-custom-token \
+  -e POSTGRES_HOST=your-postgres-host \
+  -e POSTGRES_PORT=your-postgres-port \
+  -e POSTGRES_USERNAME=your-postgres-username \
+  -e POSTGRES_PASSWORD=your-postgres-password \
+  -e POSTGRES_DATABASE=your-postgres-database \
   nautilusops/mcp-center:latest
 ```
 
 ### Using Helm
 
-```bash
-# Clone the repository
-git clone https://github.com/your-org/mcp-center.git && cd mcp-center
-
-# Install with default values
-helm install mcp-center .helm/mcp-center
-
-# Install with custom values
-helm install mcp-center .helm/mcp-center \
-  --set replicaCount=2 \
-  --set service.type=LoadBalancer \
-  --set image.repository=registry.cn-hangzhou.aliyuncs.com/ceerdecy/mcp-center \
-  --set image.tag=latest
-```
+Please see [here](docs/QUICK_START.md) to deploy with helm
 
 ### From Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/mcp-center.git
+git clone https://github.com/nautilus-ops/mcp-center.git
 cd mcp-center
 
 # Build the project
 cargo build --release
 
+# Set environments
+export MCP_ADMIN_TOKEN=your-custom-token
+export POSTGRES_HOST=your-postgres-host
+export POSTGRES_PORT=your-postgres-port
+export POSTGRES_USERNAME=your-postgres-username
+export POSTGRES_PASSWORD=your-postgres-password
+export POSTGRES_DATABASE=your-postgres-database
+
 # Run the application
 ./target/release/mcp-center run --config bootstrap.toml
 ```
 
-## Configuration
+## Usage Examples
 
-### MCP Servers Configuration (`mcp_servers.toml`)
-
-```toml
-[[mcp_servers]]
-endpoint = "http://127.0.0.1:8080/sse"
-name = "example-server"
-tag = "1.0.0"
-
-[[mcp_servers]]
-endpoint = "http://another-server:8080/sse"
-name = "another-server"
-tag = "2.0.0"
-```
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HTTP_PORT` | `5432` | HTTP server port |
-| `GRPC_PORT` | `5433` | gRPC server port |
-| `CACHE_REFLASH_INTERVAL` | `3600` | Cache refresh interval in seconds |
-| `REGISTRY_TYPE` | `memory` | Registry type (memory/external_api) |
-| `EXTERNAL_API` | - | External API endpoint URL |
-| `EXTERNAL_AUTHORIZATION` | - | External API authorization token |
-| `SERVER_DEFINITION_PATH` | `mcp_servers.toml` | Path to MCP servers definition file |
-| `SESSION_EXPIRATION` | `604800` | Session expiration time in seconds |
-
-## Kubernetes Deployment
-
-### Using Helm Chart
-
-The included Helm chart provides a complete Kubernetes deployment solution:
+### 1. Register MCP Server
 
 ```bash
-# Install with custom MCP servers configuration
-helm install mcp-center .helm/mcp-center \
-  --set mcpServersConfig="
-[[mcp_servers]]
-endpoint = \"http://your-mcp-server:8080/sse\"
-name = \"my-server\"
-tag = \"1.0.0\"
-"
-
-# Install with external registry
-helm install mcp-center .helm/mcp-center \
-  --set mcpServersConfig="" \
-  --set env[0].name=REGISTRY_TYPE \
-  --set env[0].value=external_api \
-  --set env[1].name=EXTERNAL_API \
-  --set env[1].value=http://your-registry-api
+curl -X POST http://localhost:5432/api/registry/mcp-server \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-admin-token" \
+  -d '{
+    "name": "my-mcp-server",
+    "tag": "1.0.0",
+    "endpoint": "http://my-server:8080/sse",
+    "transport_type": "sse",
+    "description": "My MCP server"
+  }'
 ```
 
-### Helm Chart Features
-
-- **ConfigMap Support**: MCP servers configuration via ConfigMap
-- **Health Checks**: Configurable liveness and readiness probes
-- **Resource Management**: CPU and memory limits/requests
-- **Service Types**: Support for ClusterIP, NodePort, and LoadBalancer
-- **Ingress Support**: Kubernetes ingress configuration
-- **Auto-scaling**: Horizontal Pod Autoscaler support
-
-## API Usage
-
-### Proxy Requests
+### 2. Get All MCP Servers
 
 ```bash
-# Forward request to MCP server
-curl http://{server_host}:5432/connect/{mcp_name}/{mcp_tag}
+curl -X GET http://localhost:5432/api/registry/mcp-server \
+  -H "Authorization: Bearer your-admin-token"
 ```
+
+### 3. Connect to MCP Server via Proxy
+
+```bash
+curl -X GET http://localhost:5432/proxy/connect/my-mcp-server/1.0.0 \
+  -H "Authorization: Bearer your-api-key"
+```
+
 
 ## Development
 
@@ -201,7 +159,7 @@ This project is licensed under the Apache License, Version 2.0 - see the [LICENS
 
 ## Roadmap
 
-- [ ] **MCP Server Registry Center**: Centralized management of MCP server endpoints
+- [x] **MCP Server Registry Center**: Centralized management of MCP server endpoints
 - [ ] **Authentication & Authorization**: JWT-based authentication
 - [ ] **Metrics & Monitoring**: Prometheus metrics and Grafana dashboards
 - [ ] **Load Balancing**: Advanced load balancing algorithms
