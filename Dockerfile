@@ -1,4 +1,4 @@
-FROM m.daocloud.io/docker.io/rust:1.89.0-slim AS builder
+FROM rust:1.89.0-slim AS builder
 
 # Install necessary packages for OpenSSL and build tools
 RUN apt-get update && \
@@ -20,7 +20,7 @@ COPY . .
 
 RUN cargo build -p mc-service --release
 
-FROM m.daocloud.io/docker.io/debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
