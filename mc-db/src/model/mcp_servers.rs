@@ -44,6 +44,7 @@ pub struct McpServers {
     pub description: String,
     pub create_from: String,
     pub extra: Option<serde_json::Value>,
+    pub disabled: bool,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub deleted_at: Option<NaiveDateTime>,

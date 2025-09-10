@@ -148,6 +148,7 @@ pub async fn register_mcp_server(
                 CreateFrom::Register.to_string()
             },
             extra: server.extra.clone(),
+            disabled: Default::default(),
             created_at: Default::default(),
             updated_at: Default::default(),
             deleted_at: None,

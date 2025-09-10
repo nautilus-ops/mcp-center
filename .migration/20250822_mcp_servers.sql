@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS tb_mcp_servers
     create_from    TEXT      NOT NULL DEFAULT 'register',
     description    TEXT      NOT NULL DEFAULT '',
     extra          JSONB     NOT NULL DEFAULT '{}',
+    disabled       BOOLEAN   NOT NULL DEFAULT false,
     created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at     TIMESTAMP
@@ -29,6 +30,7 @@ COMMENT ON COLUMN tb_mcp_servers.endpoint IS 'MCP Server public endpoint (URL)';
 COMMENT ON COLUMN tb_mcp_servers.transport_type IS 'Transport type, e.g. sse or streamable';
 COMMENT ON COLUMN tb_mcp_servers.create_from IS 'MCP Server create from, e.g. manual, register, kubernetes-service';
 COMMENT ON COLUMN tb_mcp_servers.extra IS 'Additional configuration information';
+COMMENT ON COLUMN tb_mcp_servers.disabled IS 'Disable MCP proxy, default is false';
 COMMENT ON COLUMN tb_mcp_servers.created_at IS 'Record creation time';
 COMMENT ON COLUMN tb_mcp_servers.updated_at IS 'Last update time';
 COMMENT ON COLUMN tb_mcp_servers.deleted_at IS 'Logical deletion time (NULL means not deleted)';

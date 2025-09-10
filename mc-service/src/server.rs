@@ -17,6 +17,7 @@ use mc_common::router;
 use mc_common::router::RouterHandler;
 use mc_db::DBClient;
 use std::error::Error;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::broadcast;
@@ -150,9 +151,7 @@ impl Application for McpCenterServer {
                 tracing::error!("Error creating database client, host: {host}, port: {port}, user: {username}, database: {database}, max_connection: {max_connection}");
             }).unwrap();
 
-            let migration = env::current_dir().unwrap().join(".migration");
-
-            c.migrate(migration).await.unwrap();
+            c.migrate(PathBuf::from(".migration")).await.unwrap();
             tracing::info!("Database migration successful");
             c
         });
