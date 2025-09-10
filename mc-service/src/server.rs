@@ -1,4 +1,3 @@
-use std::env;
 use crate::config::{AppConfig, McpRegistry};
 use crate::reverse_proxy;
 use axum::extract::{Request, State};
