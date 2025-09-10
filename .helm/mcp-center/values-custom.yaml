@@ -1,0 +1,29 @@
+# Example values file for custom MCP Admin Token
+# Copy this file and modify the values according to your setup
+
+# Custom MCP Admin Token (32 characters)
+# You can generate a random token using: openssl rand -hex 16
+mcpAdminToken: "your-32-character-random-token-here"
+
+# Other configurations remain the same
+replicaCount: 1
+
+image:
+  repository: nautilusops/mcp-center
+  pullPolicy: IfNotPresent
+  tag: "release"
+
+service:
+  type: ClusterIP
+  port: 5432
+
+# PostgreSQL Configuration
+postgresql:
+  enabled: false
+
+externalPostgresql:
+  host: "your-postgres-host.example.com"
+  port: 5432
+  username: "mcpcenter"
+  password: "your-secure-password"
+  database: "mcpcenter"

@@ -16,16 +16,11 @@ WORKDIR /usr/src/app
 
 COPY Cargo.toml Cargo.lock ./
 
-COPY mc-booter ./mc-booter
-COPY mc-common ./mc-common
-COPY mc-db ./mc-db
-COPY mc-loader ./mc-loader
-COPY mc-registry ./mc-registry
-COPY mc-service ./mc-service
+COPY . .
 
 RUN cargo build -p mc-service --release
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -36,6 +31,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY --from=builder /usr/src/app/target/release/mc-service /app/mcp-center
+COPY --from=builder /usr/src/app/.migration /app/.migration
 
 COPY bootstrap.toml /app/
 COPY mcp_servers.toml.example /app/mcp_servers.toml

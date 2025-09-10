@@ -44,6 +44,41 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          env:
+            {{- if .Values.postgresql.enabled }}
+            - name: POSTGRES_HOST
+              value: {{ include "mcp-center.postgresql.fullname" . }}
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USERNAME
+              value: {{ .Values.postgresql.auth.username }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mcp-center.postgresql.fullname" . }}
+                  key: postgresql-password
+            - name: POSTGRES_DATABASE
+              value: {{ .Values.postgresql.auth.database }}
+            {{- else }}
+            - name: POSTGRES_HOST
+              value: {{ .Values.externalPostgresql.host }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.externalPostgresql.port | quote }}
+            - name: POSTGRES_USERNAME
+              value: {{ .Values.externalPostgresql.username }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mcp-center.fullname" . }}-secret
+                  key: postgres-password
+            - name: POSTGRES_DATABASE
+              value: {{ .Values.externalPostgresql.database }}
+            {{- end }}
+            - name: MCP_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mcp-center.fullname" . }}-secret
+                  key: mcp-admin-token
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
@@ -56,20 +91,14 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.volumeMounts }}
           volumeMounts:
-            - name: mcp-servers-config
-              mountPath: /app/mcp_servers.toml
-              subPath: mcp_servers.toml
-            {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
-            {{- end }}
+          {{- end }}
+      {{- with .Values.volumes }}
       volumes:
-        - name: mcp-servers-config
-          configMap:
-            name: {{ include "mcp-center.fullname" . }}-config
-        {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

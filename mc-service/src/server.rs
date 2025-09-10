@@ -16,6 +16,7 @@ use mc_common::router;
 use mc_common::router::RouterHandler;
 use mc_db::DBClient;
 use std::error::Error;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::broadcast;
@@ -144,11 +145,16 @@ impl Application for McpCenterServer {
         let max_connection = self.config.postgres.max_connection;
 
         let db_client = runtime.block_on(async move {
-            DBClient::create(host, port, username, password, database, max_connection)
+            let c = DBClient::create(host, port, username, password, database, max_connection)
                 .await.inspect_err(|_| {
                 tracing::error!("Error creating database client, host: {host}, port: {port}, user: {username}, database: {database}, max_connection: {max_connection}");
-            }).unwrap()
+            }).unwrap();
+
+            c.migrate(PathBuf::from(".migration")).await.unwrap();
+            tracing::info!("Database migration successful");
+            c
         });
+
         let db_client = Arc::new(db_client);
 
         // mcp cache for reverse proxy, load mcp servers from postgres

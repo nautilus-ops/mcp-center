@@ -1,5 +1,19 @@
 MCP Center has been successfully deployed!
 
+To get your MCP Admin Token, run:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "mcp-center.fullname" . }}-secret -o jsonpath="{.data.mcp-admin-token}" | base64 --decode && echo
+
+{{- if not .Values.postgresql.enabled }}
+To get your PostgreSQL password, run:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "mcp-center.fullname" . }}-secret -o jsonpath="{.data.postgres-password}" | base64 --decode && echo
+{{- end }}
+
+To check the application status, run:
+  kubectl get pods --namespace {{ .Release.Namespace }} -l app.kubernetes.io/name=mcp-center
+
+To view the application logs, run:
+  kubectl logs --namespace {{ .Release.Namespace }} -l app.kubernetes.io/name=mcp-center
+
 {{- if .Values.ingress.enabled }}
 Access URLs:
 {{- range $host := .Values.ingress.hosts }}

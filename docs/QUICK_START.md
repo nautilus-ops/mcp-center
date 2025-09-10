@@ -14,28 +14,24 @@
 # 1. Pull the latest image
 docker pull nautilusops/mcp-center:latest
 
-# 2. Create configuration file
-cat > mcp_servers.toml << EOF
-[[mcp_servers]]
-endpoint = "http://127.0.0.1:8080/sse"
-name = "example-server"
-tag = "1.0.0"
 
-[[mcp_servers]]
-endpoint = "http://127.0.0.1:8888/mcp"
-name = "example-server"
-tag = "2.0.0"
-EOF
 
-# 3. Start the container
+# 2. Start the container
 docker run -d \
   --name mcp-center \
   -p 5432:5432 \
   -v $(pwd)/mcp_servers.toml:/app/mcp_servers.toml \
+  -e POSTGRES_HOST=your-postgres-host \
+  -e POSTGRES_PORT=your-postgres-port
+  -e POSTGRES_USERNAME=your-postgres-username
+  -e POSTGRES_PASSWORD=your-postgres-password
+  -e POSTGRES_DATABASE=your-postgres-database
   nautilusops/mcp-center:latest
 ```
 
 ### Method 2: Using Helm (Kubernetes)
+
+
 
 ```bash
 # 1. Clone the repository
